@@ -1,0 +1,38 @@
+[INFO]  PresenceAutotest v1.0 started
+[INFO]  === Starting Simulation Test ===
+[INFO]  Initializing AudioSystem...
+[INFO]  Running simulation loop (60 frames)...
+[INFO]  Frame 0 [WAITING] | Pos: (0.050, 2.000, 0.000)
+[INFO]  Frame 10 [VALID] | Pos: (0.550, 2.000, 0.000)
+  > Room Level           : -1436.0000
+  > Decay Time           : 4.8395
+  > Reflections          : -1645.0000
+  > Env Size             : 13.5616
+  > Enclosedness         : 0.0000
+[INFO]  Frame 20 [VALID] | Pos: (1.050, 2.000, 0.000)
+  > Room Level           : -355.0000
+  > Decay Time           : 5.3850
+  > Reflections          : -590.0000
+  > Env Size             : 15.2501
+  > Enclosedness         : 0.0000
+[INFO]  Frame 30 [VALID] | Pos: (1.550, 2.000, 0.000)
+  > Room Level           : -51.0000
+  > Decay Time           : 5.5843
+  > Reflections          : -293.0000
+  > Env Size             : 15.7603
+  > Enclosedness         : 0.0000
+[INFO]  Frame 40 [VALID] | Pos: (2.050, 2.000, 0.000)
+  > Room Level           : 96.0000
+  > Decay Time           : 5.6511
+  > Reflections          : -144.0000
+  > Env Size             : 16.0395
+  > Enclosedness         : 0.0000
+[INFO]  Frame 50 [VALID] | Pos: (2.550, 2.000, 0.000)
+  > Room Level           : 168.0000
+  > Decay Time           : 5.4860
+  > Reflections          : -67.0000
+  > Env Size             : 15.6540
+  > Enclosedness         : 0.0000
+[INFO]  Shutting down system...
+[INFO]  Test Finished Successfully.
+[INFO]  Press Enter to exit...
