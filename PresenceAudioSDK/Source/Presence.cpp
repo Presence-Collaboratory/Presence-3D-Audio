@@ -67,13 +67,27 @@ namespace Presence
     static const MaterialInfo kMaterialRegistry[] =
     {
         // Transm | Refl  | Absorp | Weight(RT60)
-        { 1.00f,   0.00f,   0.00f,   0.00f }, // [0] Air: Звук проходит полностью, не отражается.
-        { 0.05f,   0.70f,   0.15f,   0.70f }, // [1] Stone: Почти не пропускает, сильно отражает (гулкое эхо).
-        { 0.01f,   0.95f,   0.05f,   0.80f }, // [2] Metal: Блокирует звук, идеальное отражение (звенящее эхо).
-        { 0.30f,   0.30f,   0.40f,   0.30f }, // [3] Wood: Частично пропускает, умеренно поглощает (теплый тон).
-        { 0.65f,   0.10f,   0.80f,   0.10f }, // [4] Soft: Хорошо пропускает НЧ, сильно поглощает (ткань, трава).
-        { 0.40f,   0.85f,   0.05f,   0.60f }, // [5] Glass: Пропускает звук, но сильно отражает ВЧ.
-        { 0.10f,   0.01f,   0.99f,   0.01f }, // [6] Absorber: Изолятор. Не пропускает и полностью поглощает (студия).
+        // Воздух
+        { 1.00f,   0.00f,   0.00f,   0.00f },
+
+        // Stone/Concrete: Ставим 0.15 (15%). Это достаточно тихо, но не 0.
+        // Звук будет приглушен на -16dB, что ощутимо, но слышно.
+        { 0.15f,   0.70f,   0.15f,   0.70f },
+
+        // Metal: Металл звенит, но плохо пропускает. Ставим 0.1 (10%).
+        { 0.10f,   0.95f,   0.05f,   0.80f },
+
+        // Wood: Дерево хорошо пропускает НЧ. Ставим 0.4 (40%).
+        { 0.40f,   0.30f,   0.40f,   0.30f },
+
+        // Soft: Ткань/Кусты почти не глушат звук. 80%.
+        { 0.80f,   0.10f,   0.80f,   0.10f },
+
+        // Glass: Стекло тонкое. 30%.
+        { 0.30f,   0.85f,   0.05f,   0.60f },
+
+        // Absorber
+        { 0.00f,   0.01f,   0.99f,   0.01f },
     };
 
     // Безопасный доступ к свойствам материала с проверкой границ массива.
@@ -608,107 +622,147 @@ namespace Presence
         if (!m_Impl || !m_Impl->m_Provider) return 1.0f;
 
         float3 dirToSource = sourcePos - listenerPos;
-        float dist = dirToSource.magnitude();
-        if (dist < 0.5f) return 1.0f; // Звук внутри игрока всегда слышен
+        float totalDist = dirToSource.magnitude();
+
+        // Если очень близко - считаем, что препятствий нет (борьба с клиппингом камеры)
+        if (totalDist < 0.5f) return 1.0f;
+
         dirToSource = dirToSource.normalize();
 
-        const int RAYS_INNER = 4; // Прямые лучи (для проверки проницаемости)
-        const int RAYS_OUTER = 4; // Боковые лучи (для поиска отражений/проемов)
-        // Конус разброса лучей зависит от дистанции
-        const float CONE_SPREAD = std::min(1.5f, dist * 0.15f);
+        // =============================================================================================
+        // ШАГ 1: Multi-Layer Penetration (Пробитие стен)
+        // =============================================================================================
 
-        float totalEnergy = 0.0f;
-        float maxPossibleEnergy = 0.0f;
+        float directEnergy = 1.0f;
+        float3 currentPos = listenerPos;
 
-        // Строим базис для смещения лучей
-        float3 right = float3(0, 1, 0).cross(dirToSource).normalize();
-        if (right.magnitude() < 0.01f) right = float3(1, 0, 0);
-        float3 up = dirToSource.cross(right).normalize();
+        // Сдвигаем точку старта, чтобы не попасть в коллизию ГГ (голову)
+        currentPos.mad(dirToSource, 0.2f);
 
-        // 1. Центральный луч (прямая видимость)
-        // Имеет двойной вес, т.к. прямой путь самый важный.
+        float distTravelled = 0.2f; // Сколько уже прошли
+        int safeGuard = 0;
+        const int MAX_LAYERS = 4; // Максимум 4 стены, дальше тишина
+
+        while (distTravelled < totalDist && safeGuard < MAX_LAYERS)
         {
-            RayHit hit = m_Impl->m_Provider->CastRay(listenerPos, dirToSource, dist);
-            float transmission = 1.0f;
-            if (hit.isHit) {
-                // Если препятствие есть, берем его коэффициент пропускания из реестра
-                transmission = GetMatInfo(hit.material).transmission;
-            }
-            totalEnergy += transmission * 2.0f;
-            maxPossibleEnergy += 2.0f;
-        }
+            float scanDist = totalDist - distTravelled;
 
-        // 2. Прямая передача (Inner Rays - Transmission)
-        // Пучок лучей вокруг центра, чтобы проверить "толщину" или "дырявость" препятствия.
-        float3 innerOffsets[4] = { right, -right, up, -up };
-        for (int i = 0; i < RAYS_INNER; i++)
-        {
-            float3 offset = innerOffsets[i] * (CONE_SPREAD * 0.3f);
-            float3 target = sourcePos + offset;
-            float3 rayDir = target - listenerPos;
-            float rayDist = rayDir.magnitude();
-            rayDir = rayDir.normalize();
+            // Пускаем луч
+            RayHit hit = m_Impl->m_Provider->CastRay(currentPos, dirToSource, scanDist);
 
-            RayHit hit = m_Impl->m_Provider->CastRay(listenerPos, rayDir, rayDist);
-            float transmission = 1.0f;
-            if (hit.isHit) {
-                transmission = GetMatInfo(hit.material).transmission;
-            }
-            totalEnergy += transmission;
-            maxPossibleEnergy += 1.0f;
-        }
-
-        // 3. Отражения и Дифракция (Outer Rays - Reflection)
-        // Если прямой путь сильно блокирован (< 30% энергии), пытаемся найти путь в обход.
-        // Это симулирует звук, залетающий через дверные проемы или отражающийся от стен коридора.
-        if (totalEnergy / maxPossibleEnergy < 0.3f)
-        {
-            float3 outerOffsets[4] = {
-                (right + up).normalize(), (right - up).normalize(),
-                (-right + up).normalize(), (-right - up).normalize()
-            };
-
-            for (int i = 0; i < RAYS_OUTER; i++)
+            if (!hit.isHit)
             {
-                float3 rayDir = (dirToSource + outerOffsets[i] * 0.5f).normalize(); // Широкий угол
-                float bounceSearchDist = std::min(dist, 10.0f); // Ищем стены рядом с игроком
-                RayHit hit = m_Impl->m_Provider->CastRay(listenerPos, rayDir, bounceSearchDist);
+                // Путь чист до самого источника
+                break;
+            }
+
+            // Мы во что-то попали. Проверяем расстояние от точки удара до ИСТОЧНИКА звука.
+            // Вычисляем точку удара
+            float3 hitPoint = currentPos;
+            hitPoint.mad(dirToSource, hit.distance);
+
+            float distHitToSource = (sourcePos - hitPoint).magnitude();
+
+            // [ВАЖНО] Игнорирование геометрии источника.
+            // Если мы попали во что-то, что ближе 40см к источнику звука, 
+            // мы считаем, что попали в "тело" монстра или "модель" оружия. Это не стена.
+            if (distHitToSource < 0.4f)
+            {
+                break; // Считаем, что дошли до цели
+            }
+
+            // Это реальная стена. Применяем штраф.
+            float trans = GetMatInfo(hit.material).transmission;
+            directEnergy *= trans;
+
+            // Если энергия стала слишком мала - выходим
+            if (directEnergy < 0.05f)
+            {
+                directEnergy = 0.0f;
+                break;
+            }
+
+            // ПРОБИВАНИЕ:
+            // Перемещаем точку трассировки ЗА стену.
+            // 0.3f - это шаг 30см. Это позволяет перепрыгнуть толщину большинства стен в Сталкере.
+            float stepSize = 0.3f;
+
+            currentPos = hitPoint;
+            currentPos.mad(dirToSource, stepSize);
+
+            distTravelled += (hit.distance + stepSize);
+            safeGuard++;
+        }
+
+        // Если прямой путь заблокирован полностью, оставляем шанс для отражений
+        // Но не позволяем отражениям быть громче 30%, если прямой видимости нет вообще.
+        float maxRefl = (directEnergy > 0.1f) ? 0.5f : 0.2f;
+
+        // =============================================================================================
+        // ШАГ 2: Отражения (Diffraction approximation)
+        // =============================================================================================
+        float reflectedEnergy = 0.0f;
+
+        // Считаем отражения, только если прямой звук приглушен.
+        if (directEnergy < 0.9f)
+        {
+            // Упрощенная схема: пускаем меньше лучей для производительности
+            const int NUM_RAYS = 4;
+            const float CONE_ANGLE = 0.6f;
+
+            static thread_local std::mt19937 rng(std::random_device{}());
+            std::uniform_real_distribution<float> dist01(0.0f, 1.0f);
+
+            // Базис
+            float3 right = float3(0, 1, 0).cross(dirToSource).normalize();
+            if (right.magnitude() < 0.01f) right = float3(1, 0, 0);
+            float3 up = dirToSource.cross(right).normalize();
+
+            for (int i = 0; i < NUM_RAYS; ++i)
+            {
+                float r = dist01(rng) * CONE_ANGLE;
+                float theta = dist01(rng) * 2.0f * PI;
+                float3 offset = (right * std::cos(theta) + up * std::sin(theta)) * r;
+                float3 rayDir = (dirToSource + offset).normalize();
+
+                // Ищем отражающую поверхность рядом
+                RayHit hit = m_Impl->m_Provider->CastRay(listenerPos, rayDir, totalDist * 1.2f);
 
                 if (hit.isHit)
                 {
-                    // Получаем отражающую способность стены
-                    float reflectivity = GetMatInfo(hit.material).reflectivity;
+                    // Проверяем, видит ли эта стена источник
+                    float3 hitPoint = listenerPos; hitPoint.mad(rayDir, hit.distance - 0.1f);
+                    float3 toSource = sourcePos - hitPoint;
+                    float d = toSource.magnitude();
+                    toSource = toSource.normalize();
 
-                    if (reflectivity > 0.1f)
+                    // Check Shadow
+                    RayHit shadow = m_Impl->m_Provider->CastRay(hitPoint, toSource, d);
+
+                    // Также игнорируем самопересечение с источником в shadow ray
+                    bool clearPath = !shadow.isHit;
+                    if (shadow.isHit) {
+                        // Если теневой луч попал в сам источник (дистанция от хита до источника мала)
+                        float distShadowHitToSource = d - shadow.distance; // Приблизительно
+                        if (distShadowHitToSource < 0.5f) clearPath = true;
+                    }
+
+                    if (clearPath)
                     {
-                        // Считаем вектор отражения и проверяем, виден ли источник из точки удара
-                        float3 reflectDir = float3::reflect(rayDir, hit.normal).normalize();
-                        float3 hitPos = listenerPos; hitPos.mad(rayDir, hit.distance - 0.05f);
-                        float3 dirToSrcFromBounce = sourcePos - hitPos;
-                        float distBounce = dirToSrcFromBounce.magnitude();
-                        dirToSrcFromBounce = dirToSrcFromBounce.normalize();
-
-                        // Если отражение направлено в сторону источника
-                        if (reflectDir.dot(dirToSrcFromBounce) > 0.0f)
-                        {
-                            // Проверяем путь: Стена -> Источник
-                            RayHit bounceHit = m_Impl->m_Provider->CastRay(hitPos, dirToSrcFromBounce, distBounce);
-                            if (!bounceHit.isHit) {
-                                // Если путь чист, добавляем энергию отражения
-                                float angleFactor = reflectDir.dot(dirToSrcFromBounce);
-                                totalEnergy += reflectivity * angleFactor * 0.5f; // 0.5 - штраф за отскок
-                            }
-                        }
+                        // Отражение найдено
+                        float wallRefl = GetMatInfo(hit.material).reflectivity;
+                        reflectedEnergy += wallRefl * (1.0f / NUM_RAYS);
                     }
                 }
             }
         }
 
-        float occlusion = totalEnergy / maxPossibleEnergy;
+        // Смешиваем. Отражения не могут быть громче maxRefl.
+        reflectedEnergy = std::min(reflectedEnergy, maxRefl);
 
-        // Квадратичное затухание для более естественного восприятия (Sound Power vs Pressure)
-        occlusion = occlusion * occlusion;
+        // Финальная формула: Direct + Reflections
+        float total = directEnergy + reflectedEnergy;
 
-        return std::clamp(occlusion, 0.0f, 1.0f);
+        return std::clamp(total, 0.0f, 1.0f);
     }
-}
+} // namespace Presence
