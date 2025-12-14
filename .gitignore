@@ -33,3 +33,5 @@
 
 intermediate/*
 bin/*
+.vs/*
+lib/*
