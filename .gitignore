@@ -33,3 +33,9 @@
 
 intermediate/*
 bin/*
+*.db
+*.db-shm
+*.db-wal
+*.opendb
+*.ipch
+*.exp

@@ -81,25 +81,25 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
-    <ExternalIncludePath>H:\Indev\PresenceAudioSDK\PresenceAudioSDK\Include;$(ExternalIncludePath)</ExternalIncludePath>
+    <ExternalIncludePath>$(SolutionDir)PresenceAudioSDK\Include;$(ExternalIncludePath)</ExternalIncludePath>
     <OutDir>$(SolutionDir)\bin\x86\</OutDir>
     <IntDir>$(SolutionDir)\intermediate\$(Platform)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
-    <ExternalIncludePath>H:\Indev\PresenceAudioSDK\PresenceAudioSDK\Include;$(ExternalIncludePath)</ExternalIncludePath>
+    <ExternalIncludePath>$(SolutionDir)PresenceAudioSDK\Include;$(ExternalIncludePath)</ExternalIncludePath>
     <OutDir>$(SolutionDir)\bin\x86\</OutDir>
     <IntDir>$(SolutionDir)\intermediate\$(Platform)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <ExternalIncludePath>H:\Indev\PresenceAudioSDK\PresenceAudioSDK\Include;$(ExternalIncludePath)</ExternalIncludePath>
+    <ExternalIncludePath>$(SolutionDir)PresenceAudioSDK\Include;$(ExternalIncludePath)</ExternalIncludePath>
     <OutDir>$(SolutionDir)\bin\x64\</OutDir>
     <IntDir>$(SolutionDir)\intermediate\$(Platform)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <ExternalIncludePath>H:\Indev\PresenceAudioSDK\PresenceAudioSDK\Include;$(ExternalIncludePath)</ExternalIncludePath>
+    <ExternalIncludePath>$(SolutionDir)PresenceAudioSDK\Include;$(ExternalIncludePath)</ExternalIncludePath>
     <OutDir>$(SolutionDir)\bin\x64\</OutDir>
     <IntDir>$(SolutionDir)\intermediate\$(Platform)\</IntDir>
   </PropertyGroup>
