@@ -4,7 +4,7 @@
   High-Performance Real-time Audio Path Tracing & EAX Simulation Library
 ====================================================================================================
 
-  Copyright (c) 2025 Nocturning Studio, NSDeathman & Gemini 3
+  Copyright (c) 2025 Presence Collaboratory, NSDeathman & Gemini 3
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -17,7 +17,7 @@
      copies or substantial portions of the Software.
 
   2. Any project (commercial, free, open-source, or closed-source) using this Software
-     must include attribution to "Presence Audio SDK by Nocturning Studio" in its
+     must include attribution to "Presence Audio SDK by Presence Collaboratory" in its
      documentation, credits, or about screen.
 
   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
@@ -30,7 +30,7 @@
 
 ====================================================================================================
   Developed by: NSDeathman (Architecture & Core), Gemini 3 (Optimization & Math)
-  Organization: Nocturning Studio
+  Organization: Presence Collaboratory
 ====================================================================================================
 */
 #include <PresenceSystem.h> 
@@ -55,7 +55,7 @@ namespace Presence
     // Используется паттерн Data-Driven Design для легкого добавления новых типов поверхностей.
     // =================================================================================================
 
-    struct MaterialInfo
+    struct MaterialParams
     {
         float transmission;  // [0.0-1.0] Проницаемость: сколько звука проходит сквозь препятствие (для Occlusion).
         float reflectivity;  // [0.0-1.0] Отражающая способность: сила эха и вторичных отражений.
@@ -64,7 +64,7 @@ namespace Presence
     };
 
     // Таблица свойств. Индекс в массиве должен строго соответствовать enum MaterialType.
-    static const MaterialInfo kMaterialRegistry[] =
+    static const MaterialParams kMaterialRegistry[] =
     {
         // Transm | Refl  | Absorp | Weight(RT60)
         // Воздух
@@ -91,7 +91,7 @@ namespace Presence
     };
 
     // Безопасный доступ к свойствам материала с проверкой границ массива.
-    static const MaterialInfo& GetMatInfo(MaterialType t)
+    static const MaterialParams& GetMatInfo(MaterialType t)
     {
         int idx = (int)t;
         // Fallback на воздух, если индекс поврежден или материал не определен
