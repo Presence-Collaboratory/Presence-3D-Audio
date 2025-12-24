@@ -39,3 +39,4 @@ bin/*
 *.opendb
 *.ipch
 *.exp
+.vs/PresenceAudioSDK/v16/.suo
