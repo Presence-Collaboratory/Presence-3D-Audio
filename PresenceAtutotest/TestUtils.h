@@ -40,7 +40,6 @@
 #include <sstream>
 #include <mutex>
 #include <iomanip>
-
 class Logger {
 public:
     static void Init(const std::string& filename) {
@@ -50,31 +49,29 @@ public:
     static void Log(const std::string& msg, bool isError = false) {
         std::lock_guard<std::mutex> lock(GetInstance().logMutex);
 
-        // Вывод в консоль с цветом (упрощенно для Windows)
+        // Вывод в консоль
         if (isError) std::cerr << "[ERROR] " << msg << std::endl;
         else         std::cout << "[INFO]  " << msg << std::endl;
 
         // Вывод в файл
         if (GetInstance().fileStream.is_open()) {
             GetInstance().fileStream << (isError ? "[ERROR] " : "[INFO]  ") << msg << std::endl;
-            GetInstance().fileStream.flush(); // Чтобы данные не потерялись при краше
+            GetInstance().fileStream.flush();
         }
     }
 
     static void LogParam(const std::string& name, float value) {
         std::lock_guard<std::mutex> lock(GetInstance().logMutex);
         std::stringstream ss;
-        ss << std::left << std::setw(25) << name << ": " << std::fixed << std::setprecision(4) << value;
+        ss << "    " << std::left << std::setw(25) << name << ": " << std::fixed << std::setprecision(4) << value;
 
         std::cout << ss.str() << std::endl;
         if (GetInstance().fileStream.is_open()) GetInstance().fileStream << ss.str() << std::endl;
     }
-
 private:
     std::ofstream fileStream;
     std::mutex logMutex;
 
-    // Singleton pattern
     static Logger& GetInstance() {
         static Logger instance;
         return instance;

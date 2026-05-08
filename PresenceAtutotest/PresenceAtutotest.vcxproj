@@ -161,6 +161,11 @@
     <ClInclude Include="MockGeometry.h" />
     <ClInclude Include="TestUtils.h" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\PresenceAudioSDK\Source\PresenceAudioSDK.vcxproj">
+      <Project>{3069dde2-b851-484d-94bb-bc53146c8eee}</Project>
+    </ProjectReference>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

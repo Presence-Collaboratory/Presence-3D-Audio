@@ -34,83 +34,69 @@
 ====================================================================================================
 */
 #pragma once
-#include <PresenceSystem.h>
-#include <limits>
+#include "../PresenceAudioSDK/Include/PresenceSystem.h"
 #include <vector>
-
+#include <cmath>
 using namespace Presence;
-
-// Простая структура плоскости для пересечений
 struct Plane {
     float3 normal;
-    float distance; // Расстояние от начала координат (d в уравнении ax+by+cz+d=0)
+    float distance; // Смещение плоскости (D в уравнении dot(N, P) + D = 0)
     MaterialType mat;
 };
-
 class BoxRoomProvider : public IGeometryProvider {
 private:
     std::vector<Plane> walls;
-
 public:
     BoxRoomProvider() {
         // Создаем комнату 10x10x4 метра (центр в 0,0,0)
-        // Пол (y = 0)
+        // Уравнение плоскости: dot(Normal, Point) + Distance = 0
+
+            // Пол (y = 0). Нормаль вверх (0,1,0). 
+                // 0*x + 1*y + 0*z + D = 0 => 0 + D = 0 => D = 0.
         walls.push_back({ {0, 1, 0}, 0.0f, MaterialType::Stone });
-        // Потолок (y = 4)
-        walls.push_back({ {0, -1, 0}, 4.0f, MaterialType::Wood }); // Потолок выше на 4м
-        // Стена Z+ (z = 5)
+
+        // Потолок (y = 4). Нормаль вниз (0,-1,0). 
+        // 0*x + (-1)*4 + 0*z + D = 0 => -4 + D = 0 => D = 4.
+        walls.push_back({ {0, -1, 0}, 4.0f, MaterialType::Wood });
+
+        // Стена Z+ (z = 5). Нормаль внутрь (0,0,-1).
+        // (-1)*5 + D = 0 => D = 5.
         walls.push_back({ {0, 0, -1}, 5.0f, MaterialType::Stone });
-        // Стена Z- (z = -5)
+
+        // Стена Z- (z = -5). Нормаль внутрь (0,0,1).
+        // 1*(-5) + D = 0 => D = 5.
         walls.push_back({ {0, 0, 1}, 5.0f, MaterialType::Stone });
-        // Стена X+ (x = 5)
+
+        // Стена X+ (x = 5). Нормаль внутрь (-1,0,0).
+        // (-1)*5 + D = 0 => D = 5.
         walls.push_back({ {-1, 0, 0}, 5.0f, MaterialType::Metal });
-        // Стена X- (x = -5)
+
+        // Стена X- (x = -5). Нормаль внутрь (1,0,0).
+        // 1*(-5) + D = 0 => D = 5.
         walls.push_back({ {1, 0, 0}, 5.0f, MaterialType::Metal });
     }
 
-    // Реализация трассировки
+    // Реализация трассировки луча
     virtual RayHit CastRay(const float3& start, const float3& dir, float maxDist) override {
         RayHit closestHit;
-        closestHit.distance = maxDist;
         closestHit.isHit = false;
+        closestHit.distance = maxDist;
 
         for (const auto& plane : walls) {
-            // Пересечение луча и плоскости: t = -(dot(n, p0) + d) / dot(n, dir)
-            // Но у нас уравнение Plane: dot(n, p) + distance = 0 -> distance это смещение
-            // Обычно плоскость задается как dot(n, p) = d.
-            // Для упрощения используем логику смещения плоскости от начала координат.
-
             float denom = plane.normal.dot(dir);
 
-            // Если denom близок к 0, луч параллелен плоскости
-            if (std::abs(denom) > 1e-6f) {
-                // Вектор от точки на плоскости до старта
-                // Точка на плоскости: center = normal * distance (для box)
-                // Или просто используем стандартную формулу для Axis Aligned Planes
-
-                // Перепишем для box offset logic:
-                // Плоскость определяется: (P - P0) * n = 0
-                // P0 = plane.normal * (-plane.distance) - если distance это offset
-                // Давайте проще: t = (offset - dot(n, start)) / dot(n, dir)
-
-                // В данном сетапе distance - это смещение плоскости вдоль нормали.
-                // Например, пол: N(0,1,0), D=0. Точка на полу (0,0,0).
-                // Потолок: N(0,-1,0), D=4. Точка (0,4,0).
-
-                // Корректная формула для нашего определения Box:
-                // Точка на плоскости P_plane = plane.normal * (-plane.distance) - НЕТ.
-                // Давайте просто считать distance как расстояние от центра комнаты (0,0,0) до стены.
-                // Стена X=5. Нормаль (-1, 0, 0) (смотрит внутрь). 
-                // Уравнение плоскости: dot(N, P) + D = 0.
-                // dot((-1,0,0), (5,0,0)) + D = 0 => -5 + D = 0 => D = 5.
-
-                float t = (plane.distance - plane.normal.dot(start)) / denom;
+            // Если denom < 0, значит луч летит НАВСТРЕЧУ плоскости (нормаль смотрит на нас)
+            // Иначе мы стреляем в "спину" стене или параллельно.
+            if (denom < -1e-6f) {
+                // Уравнение пересечения луча и плоскости:
+                // t = -(dot(N, S) + D) / dot(N, V)
+                float t = -(plane.normal.dot(start) + plane.distance) / denom;
 
                 if (t > 0.001f && t < closestHit.distance) {
                     closestHit.distance = t;
                     closestHit.isHit = true;
                     closestHit.normal = plane.normal;
-                    closestHit.material = plane.mat;
+                    closestHit.materialID = (int)plane.mat;
                 }
             }
         }

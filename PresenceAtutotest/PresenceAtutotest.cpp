@@ -35,38 +35,44 @@
 */
 #include "TestUtils.h"
 #include "MockGeometry.h"
-#include <PresenceSystem.h>
+#include "../PresenceAudioSDK/Include/PresenceSystem.h"
 #include <thread>
 #include <chrono>
-
-#pragma comment(lib, "PresenceAudioSDK.lib")
-
+// Линковка с библиотекой (если используется MSVC)
+// #pragma comment(lib, "PresenceAudioSDK.lib")
 using namespace Presence;
-
 void RunSimulationTest() {
     Logger::Log("=== Starting Simulation Test ===");
 
-    // 1. Создаем систему
-    AudioSystem audioSystem;
-    BoxRoomProvider geometry; // Наша фейковая комната
+        // 1. Создаем систему
+        AudioSystem audioSystem;
+
+    // Создаем геометрию на стеке (или через new, если объект большой)
+    BoxRoomProvider geometry;
+
+    Logger::Log("Geometry created: Box 10x10x4m");
 
     Settings settings;
-    settings.maxBounces = 2; // Для теста хватит 2 отскоков
-    settings.useMultithreading = true;
+    settings.maxBounces = 3;            // Достаточно для теста
+    settings.useMultithreading = true;  // Тестируем многопоточность
     settings.maxRayDistance = 100.0f;
+    settings.updateInterval = 0.033f;
 
-    Logger::Log("Initializing AudioSystem...");
+    Logger::Log("Initializing AudioSystem (" + std::string(audioSystem.GetVersionString()) + ")...");
     audioSystem.Initialize(&geometry, settings);
 
-    // 2. Симуляция игрового цикла (например, 60 кадров)
+    // 2. Симуляция игрового цикла (60 кадров ~ 2 секунды)
     // Слушатель стоит в центре комнаты (2 метра над полом)
     float3 listenerPos(0.0f, 2.0f, 0.0f);
     float dt = 0.033f; // ~30 FPS
 
     Logger::Log("Running simulation loop (60 frames)...");
+    Logger::Log("Listener moving from Center (0,2,0) towards Metal Wall (+X)");
+
+    bool dataValidOnce = false;
 
     for (int i = 0; i < 60; ++i) {
-        // Эмуляция движения: слушатель медленно идет к стене
+        // Эмуляция движения: слушатель идет к стене X+
         listenerPos.x += 0.05f;
 
         // Обновляем аудио движок
@@ -75,36 +81,42 @@ void RunSimulationTest() {
         // Получаем результат
         EAXResult res = audioSystem.GetEAXResult();
 
+        if (res.isValid) dataValidOnce = true;
+
         if (i % 10 == 0) { // Логируем каждый 10-й кадр
             std::string status = res.isValid ? "[VALID]" : "[WAITING]";
-            Logger::Log("Frame " + std::to_string(i) + " " + status +
-                " | Pos: " + listenerPos.to_string());
+            Logger::Log("Frame " + std::to_string(i) + " " + status + " | Pos: " + listenerPos.to_string());
 
             if (res.isValid) {
-                Logger::LogParam("  > Room Level", (float)res.lRoom);
-                Logger::LogParam("  > Decay Time", res.flDecayTime);
-                Logger::LogParam("  > Reflections", (float)res.lReflections);
-                Logger::LogParam("  > Env Size", res.flEnvironmentSize);
-                Logger::LogParam("  > Enclosedness", res.debugEnclosedness);
+                Logger::LogParam("Room Level (mB)", (float)res.lRoom);
+                Logger::LogParam("Decay Time (s)", res.flDecayTime);
+                Logger::LogParam("Reflections (mB)", (float)res.lReflections);
+                Logger::LogParam("Reverb (mB)", (float)res.lReverb);
+                Logger::LogParam("Env Size (m)", res.flEnvironmentSize);
+                Logger::LogParam("Debug Enclosed", res.debugEnclosedness);
             }
         }
 
-        // Маленькая пауза, чтобы не заспамить консоль (эмуляция времени кадра)
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        // Эмуляция времени кадра
+        std::this_thread::sleep_for(std::chrono::milliseconds(33));
+    }
+
+    if (!dataValidOnce) {
+        Logger::Log("TEST FAILED: No valid EAX data received!", true);
+    }
+    else {
+        Logger::Log("TEST PASSED: Valid data stream received.");
     }
 
     // 3. Завершение
     Logger::Log("Shutting down system...");
     audioSystem.Shutdown();
-    Logger::Log("Test Finished Successfully.");
 }
-
 int main() {
     // Инициализация логгера
     Logger::Init("PresenceAutotest_Log.txt");
     Logger::Log("PresenceAutotest v1.0 started");
-
-    try {
+        try {
         RunSimulationTest();
     }
     catch (const std::exception& e) {
@@ -116,7 +128,7 @@ int main() {
         return -1;
     }
 
-    Logger::Log("Press Enter to exit...");
+    Logger::Log("Done. Press Enter to exit...");
     std::cin.get();
     return 0;
 }
