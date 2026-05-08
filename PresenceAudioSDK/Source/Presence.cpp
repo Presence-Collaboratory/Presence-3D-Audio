@@ -66,22 +66,23 @@ namespace Presence
     // =================================================================================================
     static const float PI = 3.1415926535f;
     static const int MAX_TRACKED_MATERIALS = 64;
-    static const float SPEED_OF_SOUND = 340.0f;
 
-    // Оптимизированное распределение точек на сфере (16 направлений для анализа EAX)
+    // Сфера направлений (46 векторов)
     static const float3 SphereDirections[] = {
         {1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0}, {0,0,1}, {0,0,-1},
-        {0.707f,0,0.707f}, {-0.707f,0,0.707f}, {0.707f,0,-0.707f}, {-0.707f,0,-0.707f},
-        {0.577f,0.577f,0.577f}, {-0.577f,-0.577f,-0.577f},
-        {0,0.707f,0.707f}, {0,-0.707f,-0.707f}, {0.707f,0.707f,0}, {-0.707f,-0.707f,0}
+        {0.577f,0.577f,0.577f}, {0.577f,0.577f,-0.577f}, {0.577f,-0.577f,0.577f}, {0.577f,-0.577f,-0.577f},
+        {-0.577f,0.577f,0.577f}, {-0.577f,0.577f,-0.577f}, {-0.577f,-0.577f,0.577f}, {-0.577f,-0.577f,-0.577f},
+        {0,0.525f,0.850f}, {0,0.525f,-0.850f}, {0,-0.525f,0.850f}, {0,-0.525f,-0.850f},
+        {0.850f,0,0.525f}, {0.850f,0,-0.525f}, {-0.850f,0,0.525f}, {-0.850f,0,-0.525f},
+        {0.525f,0.850f,0}, {0.525f,-0.850f,0}, {-0.525f,0.850f,0}, {-0.525f,-0.850f,0}
     };
     static const int DIRECTIONS_COUNT = sizeof(SphereDirections) / sizeof(float3);
 
     // =================================================================================================
     // VERSION INFO
     // =================================================================================================
-    float AudioSystem::GetVersion() { return 0.2f; }
-    const char* AudioSystem::GetVersionString() { return "Presence Audio ver. 0.2 InDev"; }
+    float AudioSystem::GetVersion() { return 0.22f; }
+    const char* AudioSystem::GetVersionString() { return "Presence Audio ver. 0.22 (Size Accuracy Fix)"; }
 
     // =================================================================================================
     // THREAD-SAFE RANDOM GENERATOR
@@ -128,29 +129,19 @@ namespace Presence
     // PROFILER
     // =================================================================================================
     class PerformanceProfiler {
-        struct ThreadLocalData {
-            uint64_t totalCalls = 0;
-            uint64_t totalTimeNS = 0;
-            uint64_t maxTimeNS = 0;
-        };
-
+        struct ThreadLocalData { uint64_t totalCalls = 0; uint64_t totalTimeNS = 0; uint64_t maxTimeNS = 0; };
         using ThreadId = std::thread::id;
         std::unordered_map<std::string, std::unordered_map<ThreadId, ThreadLocalData>> m_Data;
         std::mutex m_Mutex;
         bool m_Enabled = false;
-
     public:
         void SetEnabled(bool enabled) { m_Enabled = enabled; }
         bool IsEnabled() const { return m_Enabled; }
-
         class ScopedTimer {
-            PerformanceProfiler& m_Profiler;
-            const char* m_Name;
-            std::chrono::high_resolution_clock::time_point m_Start;
-            bool m_Active;
+            PerformanceProfiler& m_Profiler; const char* m_Name;
+            std::chrono::high_resolution_clock::time_point m_Start; bool m_Active;
         public:
-            ScopedTimer(const char* name, PerformanceProfiler& profiler)
-                : m_Profiler(profiler), m_Name(name), m_Active(profiler.IsEnabled()) {
+            ScopedTimer(const char* name, PerformanceProfiler& profiler) : m_Profiler(profiler), m_Name(name), m_Active(profiler.IsEnabled()) {
                 if (m_Active) m_Start = std::chrono::high_resolution_clock::now();
             }
             ~ScopedTimer() {
@@ -160,16 +151,13 @@ namespace Presence
                 }
             }
         };
-
         void Record(const char* name, uint64_t ns) {
             std::lock_guard<std::mutex> lock(m_Mutex);
             auto& threadData = m_Data[name][std::this_thread::get_id()];
-            threadData.totalCalls++;
-            threadData.totalTimeNS += ns;
+            threadData.totalCalls++; threadData.totalTimeNS += ns;
             threadData.maxTimeNS = std::max(threadData.maxTimeNS, ns);
         }
     };
-
 #define PROFILE_SCOPE(name) Presence::PerformanceProfiler::ScopedTimer __timer(name, m_Profiler)
 
     // =================================================================================================
@@ -178,40 +166,36 @@ namespace Presence
     class MaterialSystem {
         std::vector<MaterialParams> m_Materials;
         mutable std::shared_mutex m_Mutex;
-
     public:
         MaterialSystem() {
             m_Materials.resize((int)MaterialType::Count);
-            Set(0, { 1.00f, 0.00f, 0.00f, 0.00f }); // Air
-            Set(1, { 0.15f, 0.70f, 0.15f, 0.70f }); // Stone
-            Set(2, { 0.10f, 0.95f, 0.05f, 0.80f }); // Metal
-            Set(3, { 0.40f, 0.30f, 0.40f, 0.30f }); // Wood
-            Set(4, { 0.80f, 0.10f, 0.80f, 0.10f }); // Soft
-            Set(5, { 0.30f, 0.85f, 0.05f, 0.60f }); // Glass
-            Set(6, { 0.00f, 0.01f, 0.99f, 0.01f }); // Absorber
+            Set(0, { 1.00f, 0.00f, 0.00f, 0.00f });
+            Set(1, { 0.15f, 0.70f, 0.15f, 0.70f });
+            Set(2, { 0.10f, 0.95f, 0.05f, 0.80f });
+            Set(3, { 0.40f, 0.30f, 0.40f, 0.30f });
+            Set(4, { 0.80f, 0.10f, 0.80f, 0.10f });
+            Set(5, { 0.30f, 0.85f, 0.05f, 0.60f });
+            Set(6, { 0.00f, 0.01f, 0.99f, 0.01f });
         }
-
         bool Set(int id, const MaterialParams& p) {
             std::unique_lock<std::shared_mutex> lock(m_Mutex);
-            if (id >= 0 && id < (int)m_Materials.size()) { m_Materials[id] = p; return true; }
+            if (id >= 0) {
+                if (id >= (int)m_Materials.size()) m_Materials.resize(id + 1);
+                m_Materials[id] = p; return true;
+            }
             return false;
         }
-
         int Add(const MaterialParams& p) {
             std::unique_lock<std::shared_mutex> lock(m_Mutex);
             m_Materials.push_back(p);
             return (int)m_Materials.size() - 1;
         }
-
         MaterialParams Get(int id) const {
             std::shared_lock<std::shared_mutex> lock(m_Mutex);
             if (id < 0 || id >= (int)m_Materials.size()) return m_Materials[0];
             return m_Materials[id];
         }
-
-        float GetStepSize(int id) const {
-            return (Get(id).transmission > 0.5f) ? 0.2f : 0.4f;
-        }
+        float GetStepSize(int id) const { return (Get(id).transmission > 0.5f) ? 0.2f : 0.4f; }
     };
 
     // =================================================================================================
@@ -220,243 +204,54 @@ namespace Presence
     class OcclusionCalculator {
     public:
         struct Config {
-            int MaxDiffractionDepth = 3;
-            float MaxDistance = 80.0f;
-            float MinDirectThreshold = 0.02f;
-            bool EnableVertical = true;
-            bool EnablePortals = true;
+            float MaxDistance = 80.0f; 
         };
-
     private:
         IGeometryProvider* m_Provider;
         const MaterialSystem& m_Materials;
         PerformanceProfiler& m_Profiler;
         Config m_Config;
-
-        struct CacheEntry {
-            float occlusion;
-            uint64_t lastFrame;
-            float3 lPos, sPos;
-        };
+        struct CacheEntry { float occlusion; uint64_t lastFrame; float3 lPos, sPos; };
         mutable std::unordered_map<uint64_t, CacheEntry> m_Cache;
         mutable std::unordered_map<uint64_t, float> m_History;
         mutable std::mutex m_CacheMutex;
         uint64_t m_CurrentFrame = 0;
 
-        struct PathNode { float3 pos; float energy; int depth; float3 prevDir; };
-
     public:
         OcclusionCalculator(IGeometryProvider* p, const MaterialSystem& m, PerformanceProfiler& prof)
             : m_Provider(p), m_Materials(m), m_Profiler(prof) {}
-
         void SetConfig(const Config& c) { m_Config = c; }
-
         void Tick() {
-            std::lock_guard<std::mutex> lock(m_CacheMutex);
-            m_CurrentFrame++;
+            std::lock_guard<std::mutex> lock(m_CacheMutex); m_CurrentFrame++;
             if (m_CurrentFrame % 1000 == 0) {
-                const uint64_t MAX_AGE = 30;
-                for (auto it = m_Cache.begin(); it != m_Cache.end(); ) {
-                    if (m_CurrentFrame - it->second.lastFrame > MAX_AGE) it = m_Cache.erase(it); else ++it;
-                }
+                for (auto it = m_Cache.begin(); it != m_Cache.end(); ) { if (m_CurrentFrame - it->second.lastFrame > 30) it = m_Cache.erase(it); else ++it; }
                 if (m_History.size() > 2000) m_History.clear();
             }
         }
-
         float Calculate(const float3& lPos, const float3& sPos) const {
-            PROFILE_SCOPE("Occlusion::Calculate");
-
-            float3 dir = sPos - lPos;
-            float dist = dir.magnitude();
-
-            if (dist < 0.5f) return 1.0f;
-            if (dist > m_Config.MaxDistance) return 0.0f;
+            float3 dir = sPos - lPos; float dist = dir.magnitude();
+            if (dist < 0.5f) return 1.0f; if (dist > m_Config.MaxDistance) return 0.0f;
             dir = dir.normalize();
 
-            uint64_t key = Hash(lPos, sPos);
-            float cached = 0.0f;
-            if (TryGetCache(key, lPos, sPos, cached)) return cached;
+            // Simple Raycast Check
+            RayHit hit = m_Provider->CastRay(lPos, dir, dist);
+            if (!hit.isHit) return 1.0f;
 
-            float direct = ComputeDirect(lPos, sPos, dist, dir);
-            if (direct > 0.9f) {
-                UpdateCache(key, direct, lPos, sPos);
-                return direct;
-            }
-
-            float diff = ComputeDiffraction(lPos, sPos, dist, direct);
-
-            float special = 0.0f;
-            if (diff < 0.2f && direct < 0.2f) {
-                special = ComputeSpecial(lPos, sPos);
-            }
-
-            float bass = ComputeBass(direct, dist);
-
-            float result = 0.0f;
-            if (direct > 0.2f) {
-                result = direct + (diff * 0.2f);
-            }
-            else {
-                float indirect = std::max(diff, special);
-                indirect *= (1.0f / (1.0f + dist * 0.02f));
-                result = std::min(indirect, 0.75f);
-            }
-
-            result = std::clamp(result + bass, 0.05f, 1.0f);
-            UpdateCache(key, result, lPos, sPos);
-            return result;
-        }
-
-    private:
-        float ComputeDirect(const float3& start, const float3& end, float dist, const float3& dir) const {
+            // Transmission logic
             float energy = 1.0f;
-            float3 cur = start; cur.mad(dir, 0.2f);
-            float travelled = 0.2f;
-            int steps = 0;
+            float trans = m_Materials.Get(hit.materialID).transmission;
+            energy *= trans;
 
-            while (travelled < dist && steps < 6) {
-                float scan = dist - travelled;
-                RayHit hit = m_Provider->CastRay(cur, dir, scan);
-
-                if (!hit.isHit) break;
-                float3 hitPos = cur; hitPos.mad(dir, hit.distance);
-                if ((end - hitPos).magnitude() < 0.5f) break;
-
-                float trans = m_Materials.Get(hit.materialID).transmission;
-                energy *= trans;
-                if (energy < m_Config.MinDirectThreshold) return 0.0f;
-
-                float step = m_Materials.GetStepSize(hit.materialID);
-                cur = hitPos; cur.mad(dir, step);
-                travelled += (hit.distance + step);
-                steps++;
-            }
-            return energy;
-        }
-
-        float ComputeDiffraction(const float3& start, const float3& target, float dist, float directE) const {
-            if (dist > 40.0f || directE > 0.5f) return ComputeSimpleDiffraction(start, target);
-
-            std::vector<PathNode> stack;
-            stack.reserve(16);
-            stack.push_back({ start, 1.0f, 0, float3(0,0,0) });
-
-            float bestE = 0.0f;
-            int ops = 0;
-
-            while (!stack.empty() && ops < 40) {
-                PathNode cur = stack.back(); stack.pop_back(); ops++;
-
-                float3 toT = target - cur.pos;
-                float d = toT.magnitude();
-                toT = toT.normalize();
-
-                RayHit hit = m_Provider->CastRay(cur.pos, toT, d);
-                if (!hit.isHit || (d - hit.distance < 0.5f)) {
-                    float e = cur.energy * std::powf(0.6f, (float)cur.depth) * (1.0f / (1.0f + d * 0.03f));
-                    if (e > bestE) bestE = e;
-                    continue;
-                }
-
-                if (cur.depth >= m_Config.MaxDiffractionDepth || cur.energy < 0.05f) continue;
-
-                int rays = (cur.depth == 0) ? 6 : 3;
-                for (int i = 0; i < rays; ++i) {
-                    float3 dir;
-                    if (cur.depth == 0 && i < 3) {
-                        float3 r = ThreadSafeRandom::Direction();
-                        dir = (toT + r * 0.7f).normalize();
-                    }
-                    else {
-                        dir = ThreadSafeRandom::Direction();
-                        if (dir.dot(cur.prevDir) < -0.5f) dir = dir * -1.0f;
-                    }
-
-                    const float STEP = 1.8f;
-                    if (!m_Provider->CastRay(cur.pos, dir, STEP).isHit) {
-                        float3 next = cur.pos; next.mad(dir, STEP);
-                        stack.push_back({ next, cur.energy * 0.75f, cur.depth + 1, dir });
-                    }
+            // Second wall check?
+            if (energy > 0.1f) {
+                float3 p = lPos; p.mad(dir, hit.distance + 0.5f);
+                float remDist = dist - hit.distance - 0.5f;
+                if (remDist > 0) {
+                    RayHit h2 = m_Provider->CastRay(p, dir, remDist);
+                    if (h2.isHit) energy *= m_Materials.Get(h2.materialID).transmission;
                 }
             }
-            return bestE;
-        }
-
-        float ComputeSimpleDiffraction(const float3& lPos, const float3& sPos) const {
-            for (int i = 0; i < 4; ++i) {
-                float3 dir = ThreadSafeRandom::Direction();
-                if (!m_Provider->CastRay(lPos, dir, 1.5f).isHit) {
-                    float3 p = lPos; p.mad(dir, 1.5f);
-                    float3 toS = sPos - p;
-                    if (!m_Provider->CastRay(p, toS.normalize(), toS.magnitude()).isHit) return 0.25f;
-                }
-            }
-            return 0.0f;
-        }
-
-        float ComputeSpecial(const float3& lPos, const float3& sPos) const {
-            float maxE = 0.0f;
-            if (m_Config.EnableVertical) {
-                float3 offsets[] = { {0,2.5f,0}, {0,-2.5f,0} };
-                for (const auto& off : offsets) {
-                    if (!m_Provider->CastRay(lPos, off.normalize(), 2.5f).isHit) {
-                        float3 p = lPos + off;
-                        float3 toS = sPos - p;
-                        if (!m_Provider->CastRay(p, toS.normalize(), toS.magnitude()).isHit) maxE = std::max(maxE, 0.35f);
-                    }
-                }
-            }
-            if (m_Config.EnablePortals && maxE < 0.2f) {
-                int hits = 0; const int RAYS = 5;
-                for (int i = 0; i < RAYS; ++i) {
-                    float3 dir = ThreadSafeRandom::Direction();
-                    RayHit hit = m_Provider->CastRay(lPos, dir, 4.0f);
-                    if (hit.isHit) {
-                        float3 p = lPos; p.mad(dir, hit.distance);
-                        float3 hole = ThreadSafeRandom::HemisphereDir(hit.normal);
-                        float3 check = p; check.mad(hole, 0.6f); check = check + hit.normal * -0.4f;
-                        float3 toS = sPos - check;
-                        if (!m_Provider->CastRay(p, toS.normalize(), toS.magnitude()).isHit) hits++;
-                    }
-                }
-                if (hits > 0) maxE = std::max(maxE, (float)hits / RAYS * 0.5f);
-            }
-            return maxE;
-        }
-
-        float ComputeBass(float direct, float dist) const {
-            if (direct > 0.6f) return 0.0f;
-            return (1.0f - direct) * (1.0f / (1.0f + dist * 0.05f)) * 0.25f;
-        }
-
-        uint64_t Hash(const float3& a, const float3& b) const noexcept {
-            auto q = [](float f) {return (int)(f * 10.0f); };
-            uint64_t h = 0;
-            auto c = [&h](int k) { h ^= std::hash<int>{}(k)+0x9e3779b9 + (h << 6) + (h >> 2); };
-            c(q(a.x)); c(q(a.y)); c(q(a.z)); c(q(b.x)); c(q(b.y)); c(q(b.z));
-            return h;
-        }
-
-        bool TryGetCache(uint64_t key, const float3& lPos, const float3& sPos, float& out) const {
-            std::lock_guard<std::mutex> lock(m_CacheMutex);
-            auto it = m_Cache.find(key);
-            if (it != m_Cache.end()) {
-                if ((lPos - it->second.lPos).length_sq() < 0.05f &&
-                    (sPos - it->second.sPos).length_sq() < 0.05f &&
-                    (m_CurrentFrame - it->second.lastFrame) <= 5) {
-                    out = it->second.occlusion;
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        void UpdateCache(uint64_t key, float val, const float3& lPos, const float3& sPos) const {
-            std::lock_guard<std::mutex> lock(m_CacheMutex);
-            float& hist = m_History[key];
-            if (hist == 0.0f) hist = val;
-            hist = hist * 0.7f + val * 0.3f;
-            m_Cache[key] = { hist, m_CurrentFrame, lPos, sPos };
+            return std::max(energy, 0.0f);
         }
     };
 
@@ -480,16 +275,43 @@ namespace Presence
         std::atomic<bool> m_WorkPending{ false };
         std::atomic<bool> m_Initialized{ false };
 
-        // State
         float3 m_TargetPos, m_LastPos;
         float m_Fog = 0.0f;
 
         struct AnalysisContext {
             float3 CameraPosition;
             int FrameCount = 0;
-            float TotalDist = 0, TotalHits = 0;
+
+            // --- NEW METRICS FOR ACCURACY ---
+            float RawTotalDist = 0.0f;   // Unweighted geometric distance sum
+            int TotalSegments = 0;       // Total number of path segments traced
+
+            // Old energy-weighted metrics (for reverb tail calc)
+            float EnergyWeightedDist = 0.0f;
+
+            // Openness metric
+            int FirstHitCount = 0;       // How many rays hit something immediately
+
             int MatHits[MAX_TRACKED_MATERIALS] = { 0 };
-            void Reset() { FrameCount = 0; TotalDist = 0; TotalHits = 0; std::memset(MatHits, 0, sizeof(MatHits)); }
+
+            // Results
+            float PhysicalVolume = 100.0f;
+            float MeanFreePath = 5.0f;
+            float PhysicalReflectivity = 0.3f;
+            float GeometricOpenness = 0.5f;
+            float GeometricEnclosedness = 0.5f;
+            float ReverbTime = 1.0f;
+            float PerceivedReflectivity = 0.0f;
+
+            void Reset() {
+                FrameCount = 0;
+                RawTotalDist = 0; TotalSegments = 0;
+                EnergyWeightedDist = 0; FirstHitCount = 0;
+                std::memset(MatHits, 0, sizeof(MatHits));
+            }
+
+            static float Lerp(float a, float b, float t) { return a + (b - a) * t; }
+            static float Clamp(float v, float min, float max) { return (v < min) ? min : (v > max) ? max : v; }
         } m_Context;
 
         EAXResult m_TargetEAX, m_CurrentEAX;
@@ -497,24 +319,10 @@ namespace Presence
         ~Impl() { Shutdown(); }
 
         void Init(IGeometryProvider* p, const Settings& s) {
-            if (!p) throw std::invalid_argument("GeometryProvider null");
-            m_Provider = p;
-            m_Settings = s;
-            // m_Profiler.SetEnabled(true); // Uncomment to debug profile
-
+            m_Provider = p; m_Settings = s;
             m_Occlusion = std::make_unique<OcclusionCalculator>(p, m_Materials, m_Profiler);
-            if (m_Occlusion) {
-                OcclusionCalculator::Config c;
-                // Map settings here if needed
-                m_Occlusion->SetConfig(c);
-            }
-
-            m_Initialized = true;
-            m_Context.Reset();
-
-            if (s.useMultithreading) {
-                m_WorkerThread = std::make_unique<std::thread>(&Impl::PhysicsLoop, this);
-            }
+            m_Initialized = true; m_Context.Reset();
+            if (s.useMultithreading) m_WorkerThread = std::make_unique<std::thread>(&Impl::PhysicsLoop, this);
         }
 
         void Shutdown() {
@@ -525,6 +333,122 @@ namespace Presence
                 if (m_WorkerThread->joinable()) m_WorkerThread->join();
                 m_WorkerThread.reset();
             }
+        }
+
+        // ---------------------------------------------------------------------------------------------
+        // MATH: CalculatePhysics (Improved MFP)
+        // ---------------------------------------------------------------------------------------------
+        void CalculatePhysics()
+        {
+            float numRays = (float)DIRECTIONS_COUNT;
+            float totalFrames = std::max((float)m_Context.FrameCount, 1.0f);
+
+            // 1. Mean Free Path (MFP)
+            // FIX: Use Average Segment Length, not Total Path Length
+            float totalSegments = std::max((float)m_Context.TotalSegments, 1.0f);
+            float avgSegment = m_Context.RawTotalDist / totalSegments;
+
+            m_Context.MeanFreePath = std::max(avgSegment, 0.5f);
+
+            // 2. Geometric Enclosedness (Ratio of rays that hit something vs Sky)
+            float totalFirstHits = (float)m_Context.FirstHitCount / totalFrames;
+            float hitRatio = totalFirstHits / numRays;
+            m_Context.GeometricEnclosedness = AnalysisContext::Clamp(hitRatio, 0.0f, 1.0f);
+            m_Context.GeometricOpenness = 1.0f - m_Context.GeometricEnclosedness;
+
+            // 3. Physical Volume
+            // V = 4/3 * PI * R^3. Using MFP as Radius gives a good approximation for convex rooms.
+            // For a 10x10x4 room, MFP ~ 4.5m. V ~ 380m^3. Size ~ 7.2m.
+            float estVol = (4.0f / 3.0f) * PI * std::pow(m_Context.MeanFreePath, 3.0f);
+
+            if (m_Context.GeometricOpenness > 0.6f) estVol = std::min(estVol, 50000.0f);
+            m_Context.PhysicalVolume = AnalysisContext::Clamp(estVol, 10.0f, 500000.0f);
+
+            // 4. Physical Reflectivity
+            float totalMatHits = 0;
+            float accumRefl = 0;
+            for (int i = 0; i < MAX_TRACKED_MATERIALS; ++i) {
+                if (m_Context.MatHits[i] > 0) {
+                    float hits = (float)m_Context.MatHits[i] / totalFrames;
+                    totalMatHits += hits;
+                    accumRefl += hits * m_Materials.Get(i).rt60_weight;
+                }
+            }
+            float baseReflectivity = (totalMatHits > 0) ? (accumRefl / totalMatHits) : 0.1f;
+            float effectiveReflectivity = baseReflectivity * (1.0f - m_Context.GeometricOpenness * 0.8f);
+
+            m_Context.PhysicalReflectivity = AnalysisContext::Clamp(effectiveReflectivity, 0.05f, 0.95f);
+            m_Context.PerceivedReflectivity = std::pow(m_Context.PhysicalReflectivity, 0.5f);
+
+            // 5. Reverb Time (Eyring)
+            float surfArea = 6.0f * std::pow(m_Context.PhysicalVolume, 2.0f / 3.0f);
+            float absCoeff = AnalysisContext::Clamp(1.0f - m_Context.PhysicalReflectivity, 0.01f, 0.99f);
+            float rt60 = 0.161f * m_Context.PhysicalVolume / (-surfArea * std::log(1.0f - absCoeff));
+
+            // Tweaks
+            if (m_Context.PhysicalVolume < 150.0f) rt60 *= std::max(0.3f, m_Context.PhysicalVolume / 150.0f);
+            if (m_Context.GeometricOpenness > 0.4f) rt60 *= AnalysisContext::Clamp(1.0f - (m_Context.GeometricOpenness - 0.4f) * 1.8f, 0.1f, 1.0f);
+
+            m_Context.ReverbTime = AnalysisContext::Clamp(rt60, 0.1f, 8.0f);
+        }
+
+        void ComputeEAX()
+        {
+            CalculatePhysics();
+
+            EAXResult eax;
+            eax.isValid = true;
+            eax.debugEnclosedness = m_Context.GeometricEnclosedness;
+            eax.debugOpenness = m_Context.GeometricOpenness;
+
+            float fog = AnalysisContext::Clamp(m_Fog, 0.0f, 1.0f);
+            float open = m_Context.GeometricOpenness;
+
+            // Room
+            float roomInt = 0.3f + (0.7f * m_Context.GeometricEnclosedness);
+            roomInt *= std::sqrt(m_Context.PerceivedReflectivity);
+            if (open > 0.4f) {
+                float t = AnalysisContext::Clamp((open - 0.4f) / 0.6f, 0.0f, 1.0f);
+                roomInt *= AnalysisContext::Clamp(1.0f - (t * t), 0.1f, 1.0f);
+            }
+            float val = AnalysisContext::Lerp(-4000.0f, 400.0f, AnalysisContext::Clamp(roomInt - (fog * 0.4f), 0.0f, 1.1f));
+            eax.lRoom = static_cast<int32_t>(val);
+            if (m_Context.PhysicalVolume < 70.0f && m_Context.GeometricEnclosedness > 0.8f) eax.lRoom += 500;
+            eax.lRoom = static_cast<int32_t>(AnalysisContext::Clamp((float)eax.lRoom, -10000.0f, 600.0f));
+
+            // Decay
+            eax.flDecayTime = m_Context.ReverbTime;
+            if (fog > 0.5f) eax.flDecayTime *= 0.8f;
+
+            // Reflections
+            float reflScale = (open > 0.6f) ? 0.8f : 1.0f;
+            float reflectionsVal = AnalysisContext::Lerp(-2500.0f, 200.0f, m_Context.PhysicalReflectivity * reflScale);
+            eax.lReflections = static_cast<int32_t>(AnalysisContext::Clamp(reflectionsVal, -10000.0f, 500.0f));
+
+            float baseDelay = m_Context.MeanFreePath / 340.0f; // MFP is now accurate (~5m -> 0.015s)
+            if (open > 0.6f) baseDelay *= 1.5f;
+            eax.flReflectionsDelay = AnalysisContext::Clamp(baseDelay, 0.0f, 0.3f);
+
+            // Reverb
+            float reverbVal = AnalysisContext::Lerp(-3000.0f, 0.0f, roomInt);
+            if (open > 0.7f) reverbVal -= 600.0f;
+            eax.lReverb = static_cast<int32_t>(AnalysisContext::Clamp(reverbVal, -10000.0f, 200.0f));
+            eax.flReverbDelay = AnalysisContext::Clamp(eax.flReflectionsDelay + 0.02f, 0.0f, 0.1f);
+
+            // Tone
+            float hfLoss = -100.0f;
+            float outdoorCut = open * -1200.0f;
+            float roomHFVal = (float)eax.lRoom + hfLoss + outdoorCut;
+            eax.lRoomHF = static_cast<int32_t>(AnalysisContext::Clamp(roomHFVal, -10000.0f, -100.0f));
+
+            eax.flDecayHFRatio = (open > 0.6f) ? 0.5f : 0.83f;
+            eax.flEnvironmentDiffusion = (open > 0.7f) ? 0.6f : 1.0f;
+            eax.flAirAbsorptionHF = -5.0f + (open * -8.0f) - (fog * 5.0f);
+
+            // Env Size: Size of the acoustic space side (Volume^(1/3))
+            eax.flEnvironmentSize = std::pow(m_Context.PhysicalVolume, 1.0f / 3.0f);
+
+            { std::lock_guard<std::mutex> lock(m_Mutex); m_TargetEAX = eax; }
         }
 
         void PhysicsLoop() {
@@ -546,15 +470,37 @@ namespace Presence
                     for (int i = 0; i < DIRECTIONS_COUNT; ++i) {
                         float energy = 1.0f;
                         float3 pos = curPos; float3 dir = SphereDirections[i];
+
                         for (int b = 0; b < m_Settings.maxBounces; ++b) {
                             RayHit hit = m_Provider->CastRay(pos, dir, m_Settings.maxRayDistance);
-                            if (!hit.isHit) { m_Context.TotalDist += m_Settings.maxRayDistance * energy; break; }
-                            m_Context.TotalDist += hit.distance * energy;
-                            if (b == 0) m_Context.TotalHits++;
-                            if (hit.materialID >= 0 && hit.materialID < MAX_TRACKED_MATERIALS) m_Context.MatHits[hit.materialID]++;
+
+                            // Hit nothing (Sky)
+                            if (!hit.isHit) {
+                                // Treat sky as a segment of max length
+                                m_Context.RawTotalDist += m_Settings.maxRayDistance;
+                                m_Context.TotalSegments++;
+                                m_Context.EnergyWeightedDist += m_Settings.maxRayDistance * energy;
+                                break;
+                            }
+
+                            // Hit Wall
+                            // 1. Geometric data (Unweighted)
+                            m_Context.RawTotalDist += hit.distance;
+                            m_Context.TotalSegments++;
+
+                            // 2. Acoustic data (Weighted)
+                            m_Context.EnergyWeightedDist += hit.distance * energy;
+
+                            // 3. Openness Check
+                            if (b == 0) m_Context.FirstHitCount++;
+
+                            // 4. Material
+                            if (hit.materialID >= 0 && hit.materialID < MAX_TRACKED_MATERIALS)
+                                m_Context.MatHits[hit.materialID]++;
 
                             energy *= (1.0f - m_Materials.Get(hit.materialID).absorption);
                             if (energy < 0.05f) break;
+
                             pos = pos; pos.mad(dir, hit.distance - 0.05f);
                             dir = ThreadSafeRandom::HemisphereDir(hit.normal);
                         }
@@ -567,20 +513,6 @@ namespace Presence
                 std::this_thread::sleep_for(std::chrono::milliseconds(33));
             }
         }
-
-        void ComputeEAX() {
-            float frames = (float)std::max(m_Context.FrameCount, 1);
-            float rays = (float)DIRECTIONS_COUNT;
-            float mfp = std::max(m_Context.TotalDist / (frames * rays), 0.5f);
-            float enclosed = (float)m_Context.TotalHits / (frames * rays);
-
-            EAXResult res; res.isValid = true;
-            res.lRoom = (int)((enclosed - 1.0f) * 2000.0f);
-            res.flDecayTime = mfp * 0.15f;
-            res.flEnvironmentSize = mfp;
-
-            { std::lock_guard<std::mutex> lock(m_Mutex); m_TargetEAX = res; }
-        }
     };
 
     // =================================================================================================
@@ -590,17 +522,19 @@ namespace Presence
     AudioSystem::AudioSystem() : m_Impl(new Impl()) {}
     AudioSystem::~AudioSystem() { Shutdown(); delete m_Impl; }
 
-    void AudioSystem::Initialize(IGeometryProvider* p, const Settings& s) {
-        if (m_Impl) m_Impl->Init(p, s);
-    }
+    void AudioSystem::Initialize(IGeometryProvider* p, const Settings& s) { if (m_Impl) m_Impl->Init(p, s); }
+    void AudioSystem::Shutdown() { if (m_Impl) m_Impl->Shutdown(); }
 
-    void AudioSystem::Shutdown() {
-        if (m_Impl) m_Impl->Shutdown();
+    template <typename T> T LerpEAX(T current, T target, float step) {
+        float diff = static_cast<float>(target - current);
+        if (std::abs(diff) < 0.1f) return target;
+        return static_cast<T>(static_cast<float>(current) + diff * step);
     }
 
     void AudioSystem::Update(const float3& pos, float dt, float fog) {
         if (!m_Impl || !m_Impl->m_Initialized) return;
         m_Impl->m_Fog = fog;
+
         if (m_Impl->m_Settings.useMultithreading) {
             { std::lock_guard<std::mutex> lock(m_Impl->m_Mutex); m_Impl->m_TargetPos = pos; m_Impl->m_WorkPending = true; }
             m_Impl->m_CV.notify_one();
@@ -608,7 +542,26 @@ namespace Presence
 
         EAXResult target;
         { std::lock_guard<std::mutex> lock(m_Impl->m_Mutex); target = m_Impl->m_TargetEAX; }
-        if (target.isValid) m_Impl->m_CurrentEAX = target;
+
+        if (target.isValid) {
+            float speed = 2.0f * dt;
+            if (std::abs(target.lRoom - m_Impl->m_CurrentEAX.lRoom) > 1000) speed = 5.0f * dt;
+
+            auto& curr = m_Impl->m_CurrentEAX;
+            curr.lRoom = LerpEAX(curr.lRoom, target.lRoom, speed);
+            curr.lRoomHF = LerpEAX(curr.lRoomHF, target.lRoomHF, speed);
+            curr.lReflections = LerpEAX(curr.lReflections, target.lReflections, speed);
+            curr.lReverb = LerpEAX(curr.lReverb, target.lReverb, speed);
+            curr.flDecayTime = LerpEAX(curr.flDecayTime, target.flDecayTime, speed);
+            curr.flEnvironmentSize = LerpEAX(curr.flEnvironmentSize, target.flEnvironmentSize, speed);
+
+            curr.flDecayHFRatio = target.flDecayHFRatio;
+            curr.flReflectionsDelay = target.flReflectionsDelay;
+            curr.flReverbDelay = target.flReverbDelay;
+            curr.flAirAbsorptionHF = target.flAirAbsorptionHF;
+            curr.flEnvironmentDiffusion = target.flEnvironmentDiffusion;
+            curr.isValid = true;
+        }
     }
 
     EAXResult AudioSystem::GetEAXResult() const { return m_Impl ? m_Impl->m_CurrentEAX : EAXResult(); }
