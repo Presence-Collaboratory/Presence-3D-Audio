@@ -4,7 +4,7 @@
   High-Performance Real-time Audio Path Tracing & EAX Simulation Library
 ====================================================================================================
 
-  Copyright (c) 2025 Presence Collaboratory, NSDeathman & Gemini 3
+  Copyright (c) 2026 Presence Collaboratory, NSDeathman & Gemini 3
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -33,19 +33,24 @@
   Organization: Presence Collaboratory
 ====================================================================================================
 */
+#include <thread>
+#include <chrono>
+
 #include "TestUtils.h"
 #include "MockGeometry.h"
 #include "../PresenceAudioSDK/Include/PresenceSystem.h"
-#include <thread>
-#include <chrono>
+
 // Линковка с библиотекой (если используется MSVC)
 // #pragma comment(lib, "PresenceAudioSDK.lib")
+
 using namespace Presence;
-void RunSimulationTest() {
+
+void RunSimulationTest() 
+{
     Logger::Log("=== Starting Simulation Test ===");
 
-        // 1. Создаем систему
-        AudioSystem audioSystem;
+    // 1. Создаем систему
+    AudioSystem audioSystem;
 
     // Создаем геометрию на стеке (или через new, если объект большой)
     BoxRoomProvider geometry;
@@ -71,7 +76,8 @@ void RunSimulationTest() {
 
     bool dataValidOnce = false;
 
-    for (int i = 0; i < 60; ++i) {
+    for (int i = 0; i < 60; ++i) 
+    {
         // Эмуляция движения: слушатель идет к стене X+
         listenerPos.x += 0.05f;
 
@@ -83,7 +89,8 @@ void RunSimulationTest() {
 
         if (res.isValid) dataValidOnce = true;
 
-        if (i % 10 == 0) { // Логируем каждый 10-й кадр
+        if (i % 10 == 0) 
+        { // Логируем каждый 10-й кадр
             std::string status = res.isValid ? "[VALID]" : "[WAITING]";
             Logger::Log("Frame " + std::to_string(i) + " " + status + " | Pos: " + listenerPos.to_string());
 
@@ -101,29 +108,33 @@ void RunSimulationTest() {
         std::this_thread::sleep_for(std::chrono::milliseconds(33));
     }
 
-    if (!dataValidOnce) {
+    if (!dataValidOnce) 
         Logger::Log("TEST FAILED: No valid EAX data received!", true);
-    }
-    else {
+    else 
         Logger::Log("TEST PASSED: Valid data stream received.");
-    }
 
     // 3. Завершение
     Logger::Log("Shutting down system...");
     audioSystem.Shutdown();
 }
-int main() {
+
+int main() 
+{
     // Инициализация логгера
     Logger::Init("PresenceAutotest_Log.txt");
     Logger::Log("PresenceAutotest v1.0 started");
-        try {
+
+    try 
+    {
         RunSimulationTest();
     }
-    catch (const std::exception& e) {
+    catch (const std::exception& e) 
+    {
         Logger::Log(std::string("EXCEPTION: ") + e.what(), true);
         return -1;
     }
-    catch (...) {
+    catch (...) 
+    {
         Logger::Log("UNKNOWN EXCEPTION OCCURRED", true);
         return -1;
     }

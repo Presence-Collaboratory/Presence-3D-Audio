@@ -75,28 +75,28 @@
     <ExternalIncludePath>H:\Indev\PresenceAudioSDK\PresenceAudioSDK\Include;$(ExternalIncludePath)</ExternalIncludePath>
     <LibraryPath>$(SolutionDir)\bin\$(Platform)\;$(VC_LibraryPath_x86);$(WindowsSDK_LibraryPath_x86);$(LibraryPath)</LibraryPath>
     <OutDir>$(SolutionDir)\bin\$(Platform)\</OutDir>
-    <IntDir>$(SolutionDir)\intermediate\$(Platform)\</IntDir>
+    <IntDir>$(SolutionDir)\intermediate\$(Platform)\$(ProjectName)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
     <ExternalIncludePath>H:\Indev\PresenceAudioSDK\PresenceAudioSDK\Include;$(ExternalIncludePath)</ExternalIncludePath>
     <LibraryPath>$(SolutionDir)\bin\$(Platform)\;$(VC_LibraryPath_x86);$(WindowsSDK_LibraryPath_x86);$(LibraryPath)</LibraryPath>
     <OutDir>$(SolutionDir)\bin\$(Platform)\</OutDir>
-    <IntDir>$(SolutionDir)\intermediate\$(Platform)\</IntDir>
+    <IntDir>$(SolutionDir)\intermediate\$(Platform)\$(ProjectName)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
     <ExternalIncludePath>H:\Indev\PresenceAudioSDK\PresenceAudioSDK\Include;$(ExternalIncludePath)</ExternalIncludePath>
     <LibraryPath>$(SolutionDir)\bin\$(Platform)\;$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64)</LibraryPath>
     <OutDir>$(SolutionDir)\bin\$(Platform)\</OutDir>
-    <IntDir>$(SolutionDir)\intermediate\$(Platform)\</IntDir>
+    <IntDir>$(SolutionDir)\intermediate\$(Platform)\$(ProjectName)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
     <ExternalIncludePath>H:\Indev\PresenceAudioSDK\PresenceAudioSDK\Include;$(ExternalIncludePath)</ExternalIncludePath>
     <LibraryPath>$(SolutionDir)\bin\$(Platform)\;$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64)</LibraryPath>
     <OutDir>$(SolutionDir)\bin\$(Platform)\</OutDir>
-    <IntDir>$(SolutionDir)\intermediate\$(Platform)\</IntDir>
+    <IntDir>$(SolutionDir)\intermediate\$(Platform)\$(ProjectName)\</IntDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>

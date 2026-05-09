@@ -4,7 +4,7 @@
   High-Performance Real-time Audio Path Tracing & EAX Simulation Library
 ====================================================================================================
 
-  Copyright (c) 2025 Presence Collaboratory, NSDeathman & Gemini 3
+  Copyright (c) 2026 Presence Collaboratory, NSDeathman & Gemini 3
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -34,25 +34,33 @@
 ====================================================================================================
 */
 #pragma once
-#include "../PresenceAudioSDK/Include/PresenceSystem.h"
+
 #include <vector>
 #include <cmath>
+
+#include "../PresenceAudioSDK/Include/PresenceSystem.h"
+
 using namespace Presence;
-struct Plane {
+
+struct Plane 
+{
     float3 normal;
     float distance; // Смещение плоскости (D в уравнении dot(N, P) + D = 0)
     MaterialType mat;
 };
-class BoxRoomProvider : public IGeometryProvider {
+
+class BoxRoomProvider : public IGeometryProvider 
+{
 private:
     std::vector<Plane> walls;
+
 public:
     BoxRoomProvider() {
         // Создаем комнату 10x10x4 метра (центр в 0,0,0)
         // Уравнение плоскости: dot(Normal, Point) + Distance = 0
 
-            // Пол (y = 0). Нормаль вверх (0,1,0). 
-                // 0*x + 1*y + 0*z + D = 0 => 0 + D = 0 => D = 0.
+        // Пол (y = 0). Нормаль вверх (0,1,0). 
+        // 0*x + 1*y + 0*z + D = 0 => 0 + D = 0 => D = 0.
         walls.push_back({ {0, 1, 0}, 0.0f, MaterialType::Stone });
 
         // Потолок (y = 4). Нормаль вниз (0,-1,0). 
@@ -77,17 +85,20 @@ public:
     }
 
     // Реализация трассировки луча
-    virtual RayHit CastRay(const float3& start, const float3& dir, float maxDist) override {
+    virtual RayHit CastRay(const float3& start, const float3& dir, float maxDist) override 
+    {
         RayHit closestHit;
         closestHit.isHit = false;
         closestHit.distance = maxDist;
 
-        for (const auto& plane : walls) {
+        for (const auto& plane : walls) 
+        {
             float denom = plane.normal.dot(dir);
 
             // Если denom < 0, значит луч летит НАВСТРЕЧУ плоскости (нормаль смотрит на нас)
             // Иначе мы стреляем в "спину" стене или параллельно.
-            if (denom < -1e-6f) {
+            if (denom < -1e-6f) 
+            {
                 // Уравнение пересечения луча и плоскости:
                 // t = -(dot(N, S) + D) / dot(N, V)
                 float t = -(plane.normal.dot(start) + plane.distance) / denom;

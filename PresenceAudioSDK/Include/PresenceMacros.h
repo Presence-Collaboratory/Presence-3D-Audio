@@ -35,58 +35,30 @@
 */
 #pragma once
 
-#include <iostream>
-#include <fstream>
-#include <string>
-#include <sstream>
-#include <mutex>
-#include <iomanip>
+#define PRESENCE_BEGIN namespace Presence {
+#define PRESENCE_END }
 
-class Logger 
-{
-public:
-    static void Init(const std::string& filename) 
-    {
-        GetInstance().fileStream.open(filename, std::ios::out | std::ios::trunc);
-    }
+// =================================================================================================
+// DLL EXPORT / IMPORT MACROS
+// =================================================================================================
+// Standard Windows DLL visibility control macros.
+// When building the library (PRESENCE_BUILD_DLL), symbols are exported.
+// When linking from game engine - symbols are imported.
+// =================================================================================================
+#ifdef PRESENCE_BUILD_DLL
+#define PRESENCE_API __declspec(dllexport)
+#else
+#define PRESENCE_API __declspec(dllimport)
+#endif
 
-    static void Log(const std::string& msg, bool isError = false) 
-    {
-        std::lock_guard<std::mutex> lock(GetInstance().logMutex);
-
-        // Вывод в консоль
-        if (isError) std::cerr << "[ERROR] " << msg << std::endl;
-        else         std::cout << "[INFO]  " << msg << std::endl;
-
-        // Вывод в файл
-        if (GetInstance().fileStream.is_open()) {
-            GetInstance().fileStream << (isError ? "[ERROR] " : "[INFO]  ") << msg << std::endl;
-            GetInstance().fileStream.flush();
-        }
-    }
-
-    static void LogParam(const std::string& name, float value) 
-    {
-        std::lock_guard<std::mutex> lock(GetInstance().logMutex);
-        std::stringstream ss;
-        ss << "    " << std::left << std::setw(25) << name << ": " << std::fixed << std::setprecision(4) << value;
-
-        std::cout << ss.str() << std::endl;
-        if (GetInstance().fileStream.is_open()) GetInstance().fileStream << ss.str() << std::endl;
-    }
-
-private:
-    std::ofstream fileStream;
-    std::mutex logMutex;
-
-    static Logger& GetInstance() 
-    {
-        static Logger instance;
-        return instance;
-    }
-
-    Logger() {}
-    ~Logger() { if (fileStream.is_open()) fileStream.close(); }
-    Logger(const Logger&) = delete;
-    void operator=(const Logger&) = delete;
-};
+// =================================================================================================
+// MEMORY ALIGNMENT MACRO
+// =================================================================================================
+// For efficient SSE operation, data must be aligned to 16-byte boundary.
+// If memory address is not multiple of 16, _mm_load_ps will cause crash (Access Violation).
+// =================================================================================================
+#if defined(_MSC_VER)
+#define PRESENCE_ALIGN(x) __declspec(align(x))
+#else
+#define PRESENCE_ALIGN(x) __attribute__((aligned(x)))
+#endif

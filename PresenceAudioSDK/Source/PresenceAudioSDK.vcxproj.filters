@@ -21,6 +21,9 @@
     <ClInclude Include="..\Include\PresenceAudioAPI.h">
       <Filter>Include</Filter>
     </ClInclude>
+    <ClInclude Include="..\Include\PresenceMacros.h">
+      <Filter>Include</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Presence.cpp">

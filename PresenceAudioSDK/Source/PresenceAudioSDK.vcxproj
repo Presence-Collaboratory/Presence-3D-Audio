@@ -21,6 +21,7 @@
   <ItemGroup>
     <ClInclude Include="..\Include\PresenceAudioAPI.h" />
     <ClInclude Include="..\Include\PresenceDefines.h" />
+    <ClInclude Include="..\Include\PresenceMacros.h" />
     <ClInclude Include="..\Include\PresenceMath.h" />
     <ClInclude Include="..\Include\PresenceSystem.h" />
   </ItemGroup>
@@ -82,26 +83,26 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
     <ExternalIncludePath>$(SolutionDir)PresenceAudioSDK\Include;$(ExternalIncludePath)</ExternalIncludePath>
-    <OutDir>$(SolutionDir)\bin\x86\</OutDir>
-    <IntDir>$(SolutionDir)\intermediate\$(Platform)\</IntDir>
+    <OutDir>$(SolutionDir)\bin\$(Platform)\</OutDir>
+    <IntDir>$(SolutionDir)\intermediate\$(Platform)\$(ProjectName)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
     <ExternalIncludePath>$(SolutionDir)PresenceAudioSDK\Include;$(ExternalIncludePath)</ExternalIncludePath>
-    <OutDir>$(SolutionDir)\bin\x86\</OutDir>
-    <IntDir>$(SolutionDir)\intermediate\$(Platform)\</IntDir>
+    <OutDir>$(SolutionDir)\bin\$(Platform)\</OutDir>
+    <IntDir>$(SolutionDir)\intermediate\$(Platform)\$(ProjectName)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
     <ExternalIncludePath>$(SolutionDir)PresenceAudioSDK\Include;$(ExternalIncludePath)</ExternalIncludePath>
-    <OutDir>$(SolutionDir)\bin\x64\</OutDir>
-    <IntDir>$(SolutionDir)\intermediate\$(Platform)\</IntDir>
+    <OutDir>$(SolutionDir)\bin\$(Platform)\</OutDir>
+    <IntDir>$(SolutionDir)\intermediate\$(Platform)\$(ProjectName)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
     <ExternalIncludePath>$(SolutionDir)PresenceAudioSDK\Include;$(ExternalIncludePath)</ExternalIncludePath>
-    <OutDir>$(SolutionDir)\bin\x64\</OutDir>
-    <IntDir>$(SolutionDir)\intermediate\$(Platform)\</IntDir>
+    <OutDir>$(SolutionDir)\bin\$(Platform)\</OutDir>
+    <IntDir>$(SolutionDir)\intermediate\$(Platform)\$(ProjectName)\</IntDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
