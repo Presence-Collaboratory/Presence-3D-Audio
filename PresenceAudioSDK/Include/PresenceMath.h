@@ -319,6 +319,225 @@ public:
     }
 };
 
+/**
+ * @brief 2-dimensional vector class (no SIMD optimization).
+ *
+ * Represents a 2D vector (x, y), suitable for general-purpose calculations.
+ * This version uses plain float storage without SSE/AVX intrinsics, making it
+ * portable and easy to understand.
+ *
+ * @note Structure size: 8 bytes (x, y). If alignment is required, use PRESENCE_ALIGN(8).
+ */
+PRESENCE_ALIGN(8) struct float2
+{
+public:
+    // ========================================================================
+    // Data
+    // ========================================================================
+    // Direct component access for simplicity.
+    // No union is needed because there is no SIMD register representation.
+    // ========================================================================
+    float x;
+    float y;
+
+    // ========================================================================
+    // Constructors
+    // ========================================================================
+
+    /** @brief Default constructor. Initializes to zero. */
+    inline float2() noexcept : x(0.0f), y(0.0f) {}
+
+    /** @brief Constructor from scalar. All components equal s. */
+    inline explicit float2(float s) noexcept : x(s), y(s) {}
+
+    /**
+     * @brief Main constructor.
+     * @param _x X component.
+     * @param _y Y component.
+     */
+    inline float2(float _x, float _y) noexcept : x(_x), y(_y) {}
+
+    // ========================================================================
+    // Unary Operators
+    // ========================================================================
+
+    /**
+     * @brief Unary minus (Vector inversion).
+     * @return Vector (-x, -y).
+     * @note Implemented by simple negation – no SSE required.
+     */
+    inline float2 operator-() const noexcept
+    {
+        return float2(-x, -y);
+    }
+
+    // ========================================================================
+    // Access & Assignment Operators
+    // ========================================================================
+
+    inline float2& operator=(const float2& rhs) noexcept
+    {
+        x = rhs.x;
+        y = rhs.y;
+        return *this;
+    }
+
+    // Array access (0=x, 1=y). Unsafe (no bounds checking), but fast.
+    inline float& operator[](int index) noexcept { return (&x)[index]; }
+    inline const float& operator[](int index) const noexcept { return (&x)[index]; }
+
+    // ========================================================================
+    // Arithmetic (scalar style)
+    // ========================================================================
+    // All operations are performed component-wise using standard FPU instructions.
+
+    inline float2 operator+(const float2& v) const noexcept
+    {
+        return float2(x + v.x, y + v.y);
+    }
+
+    inline float2 operator-(const float2& v) const noexcept
+    {
+        return float2(x - v.x, y - v.y);
+    }
+
+    // Component-wise multiplication (x * v.x, y * v.y)
+    inline float2 operator*(const float2& v) const noexcept
+    {
+        return float2(x * v.x, y * v.y);
+    }
+
+    // Component-wise division
+    inline float2 operator/(const float2& v) const noexcept
+    {
+        return float2(x / v.x, y / v.y);
+    }
+
+    // Scalar multiplication
+    inline float2 operator*(float s) const noexcept
+    {
+        return float2(x * s, y * s);
+    }
+
+    // Scalar division (multiply by reciprocal 1/s, slightly faster)
+    inline float2 operator/(float s) const noexcept
+    {
+        float inv = 1.0f / s;
+        return float2(x * inv, y * inv);
+    }
+
+    // Compound assignment operators (+=, -=, *=)
+    inline float2& operator+=(const float2& v) noexcept
+    {
+        x += v.x;
+        y += v.y;
+        return *this;
+    }
+
+    inline float2& operator-=(const float2& v) noexcept
+    {
+        x -= v.x;
+        y -= v.y;
+        return *this;
+    }
+
+    inline float2& operator*=(float s) noexcept
+    {
+        x *= s;
+        y *= s;
+        return *this;
+    }
+
+    // ========================================================================
+    // Vector Mathematics
+    // ========================================================================
+
+    /**
+     * @brief Dot Product (Scalar product).
+     * @return x * v.x + y * v.y
+     */
+    inline float dot(const float2& v) const noexcept
+    {
+        return x * v.x + y * v.y;
+    }
+
+    /**
+     * @brief Cross Product (2D analog – returns a scalar).
+     * @return The signed area of the parallelogram formed by the two vectors.
+     * @note In 2D the cross product yields the z-component of the 3D cross product.
+     *       Formula: x * v.y - y * v.x.
+     */
+    inline float cross(const float2& v) const noexcept
+    {
+        return x * v.y - y * v.x;
+    }
+
+    /** @brief Vector magnitude (Length). */
+    inline float magnitude() const noexcept
+    {
+        return std::sqrt(dot(*this));
+    }
+
+    /** @brief Squared magnitude (Length squared). Faster as no sqrt required. */
+    inline float length_sq() const noexcept
+    {
+        return dot(*this);
+    }
+
+    /**
+     * @brief Vector normalization (scale to unit length).
+     * @return Unit vector with the same direction, or (0,0) if length is near zero.
+     */
+    inline float2 normalize() const noexcept
+    {
+        float len = magnitude();
+        if (len > 1e-6f) {
+            return *this / len;
+        }
+        return float2(); // Return (0,0) on division by zero
+    }
+
+    /** @brief Distance to another point. */
+    inline float distance_to(const float2& v) const noexcept
+    {
+        return (*this - v).magnitude();
+    }
+
+    /**
+     * @brief Multiply-Add (MAD) operation.
+     * @details Performs: this += v * s.
+     * Efficiently used in iterative algorithms: pos += dir * step.
+     */
+    inline void mad(const float2& v, float s) noexcept
+    {
+        x += v.x * s;
+        y += v.y * s;
+    }
+
+    /**
+     * @brief Vector reflection from a surface normal.
+     * @param i Incident vector.
+     * @param n Surface normal (should be normalized).
+     * @return Reflected vector: i - 2 * dot(i, n) * n.
+     */
+    static float2 reflect(const float2& i, const float2& n)
+    {
+        return i - n * (2.0f * i.dot(n));
+    }
+
+    // ========================================================================
+    // Utilities / Debugging
+    // ========================================================================
+
+    /** @brief String representation "(x, y)" for logging. */
+    std::string to_string() const
+    {
+        char buffer[64];
+        snprintf(buffer, sizeof(buffer), "(%.3f, %.3f)", x, y);
+        return std::string(buffer);
+    }
+};
+
 // =================================================================================================
 // GLOBAL OPERATORS
 // =================================================================================================

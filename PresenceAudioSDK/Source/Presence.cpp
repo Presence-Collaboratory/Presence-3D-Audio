@@ -781,6 +781,8 @@ void AudioSystem::Update(const float3& pos, float dt, float fogVal)
         curr.flReverbDelay = target.flReverbDelay;
         curr.flAirAbsorptionHF = target.flAirAbsorptionHF;
         curr.flEnvironmentDiffusion = target.flEnvironmentDiffusion;
+        curr.debugEnclosedness = target.debugEnclosedness;
+        curr.debugOpenness = target.debugOpenness;
         curr.isValid = true;
     }
 }
