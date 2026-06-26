@@ -5,5 +5,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="TestUtils.h" />
+    <ClInclude Include="MockGeometry.h" />
   </ItemGroup>
 </Project>

@@ -1,4 +1,4 @@
-п»ї/*
+/*
 ====================================================================================================
   Presence Audio SDK
   High-Performance Real-time Audio Path Tracing & EAX Simulation Library
@@ -54,11 +54,11 @@ public:
     {
         std::lock_guard<std::mutex> lock(GetInstance().logMutex);
 
-        // Р’С‹РІРѕРґ РІ РєРѕРЅСЃРѕР»СЊ
+        // Вывод в консоль
         if (isError) std::cerr << "[ERROR] " << msg << std::endl;
         else         std::cout << "[INFO]  " << msg << std::endl;
 
-        // Р’С‹РІРѕРґ РІ С„Р°Р№Р»
+        // Вывод в файл
         if (GetInstance().fileStream.is_open()) {
             GetInstance().fileStream << (isError ? "[ERROR] " : "[INFO]  ") << msg << std::endl;
             GetInstance().fileStream.flush();
