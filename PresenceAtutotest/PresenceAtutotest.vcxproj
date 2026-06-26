@@ -158,7 +158,6 @@
     <ClCompile Include="PresenceAtutotest.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="MockGeometry.h" />
     <ClInclude Include="TestUtils.h" />
   </ItemGroup>
   <ItemGroup>
