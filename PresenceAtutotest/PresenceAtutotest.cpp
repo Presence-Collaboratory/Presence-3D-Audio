@@ -35,64 +35,243 @@
 */
 #include <thread>
 #include <chrono>
+#include <vector>
+#include <cmath>
+#include <memory>
 
 #include "TestUtils.h"
-#include "MockGeometry.h"
 #include "../PresenceAudioSDK/Include/PresenceSystem.h"
-
-// Линковка с библиотекой (если используется MSVC)
-// #pragma comment(lib, "PresenceAudioSDK.lib")
 
 using namespace Presence;
 
-void RunSimulationTest() 
-{
-    Logger::Log("=== Starting Simulation Test ===");
+// ------------------------------------------------------------------
+// Geometry providers for different scenarios
+// ------------------------------------------------------------------
 
-    // 1. Создаем систему
+// 1. Closed box room (original scenario, kept for comparison)
+class BoxRoomProvider : public IGeometryProvider {
+public:
+    BoxRoomProvider() {
+        // Room 10x10x4 m, center at (0,0,0)
+        walls.push_back({ {0, 1, 0},  0.0f, MaterialType::Stone }); // floor y=0
+        walls.push_back({ {0, -1, 0}, 4.0f, MaterialType::Wood });  // ceiling y=4
+        walls.push_back({ {0, 0, -1}, 5.0f, MaterialType::Stone }); // z=5
+        walls.push_back({ {0, 0, 1},  5.0f, MaterialType::Stone }); // z=-5
+        walls.push_back({ {-1, 0, 0}, 5.0f, MaterialType::Metal }); // x=5
+        walls.push_back({ {1, 0, 0},  5.0f, MaterialType::Metal }); // x=-5
+    }
+
+    RayHit CastRay(const float3& start, const float3& dir, float maxDist) override {
+        RayHit closestHit;
+        closestHit.isHit = false;
+        closestHit.distance = maxDist;
+
+        for (const auto& plane : walls) {
+            float denom = plane.normal.dot(dir);
+            if (denom < -1e-6f) {
+                float t = -(plane.normal.dot(start) + plane.distance) / denom;
+                if (t > 0.001f && t < closestHit.distance) {
+                    closestHit.distance = t;
+                    closestHit.isHit = true;
+                    closestHit.normal = plane.normal;
+                    closestHit.materialID = static_cast<int>(plane.mat);
+                }
+            }
+        }
+        return closestHit;
+    }
+
+private:
+    struct Plane {
+        float3 normal;
+        float  distance;
+        MaterialType mat;
+    };
+    std::vector<Plane> walls;
+};
+
+// 2. Open space – only a ground plane (large outdoor area)
+class OpenSpaceProvider : public IGeometryProvider {
+public:
+    OpenSpaceProvider() {
+        // Ground at y=0, material Grass
+        walls.push_back({ {0, 1, 0}, 0.0f, MaterialType::Soft });
+    }
+
+    RayHit CastRay(const float3& start, const float3& dir, float maxDist) override {
+        RayHit closestHit;
+        closestHit.isHit = false;
+        closestHit.distance = maxDist;
+
+        for (const auto& plane : walls) {
+            float denom = plane.normal.dot(dir);
+            if (denom < -1e-6f) {
+                float t = -(plane.normal.dot(start) + plane.distance) / denom;
+                if (t > 0.001f && t < closestHit.distance) {
+                    closestHit.distance = t;
+                    closestHit.isHit = true;
+                    closestHit.normal = plane.normal;
+                    closestHit.materialID = static_cast<int>(plane.mat);
+                }
+            }
+        }
+        return closestHit;
+    }
+
+private:
+    struct Plane {
+        float3 normal;
+        float  distance;
+        MaterialType mat;
+    };
+    std::vector<Plane> walls;
+};
+
+// 3. Long corridor – narrow and extended along the Z axis
+class CorridorProvider : public IGeometryProvider {
+public:
+    CorridorProvider() {
+        // Corridor: 2m wide (X: -1..1), 3m high (Y: 0..3), length 40m (Z: -20..20)
+        walls.push_back({ {0, 1, 0},  0.0f, MaterialType::Stone }); // floor
+        walls.push_back({ {0, -1, 0}, 3.0f, MaterialType::Wood });  // ceiling
+        walls.push_back({ {0, 0, -1}, 20.0f, MaterialType::Stone }); // z = 20  (far end)
+        walls.push_back({ {0, 0, 1},  20.0f, MaterialType::Stone }); // z = -20 (near end)
+        walls.push_back({ {-1, 0, 0}, 1.0f, MaterialType::Metal });  // x = 1  (right wall)
+        walls.push_back({ {1, 0, 0},  1.0f, MaterialType::Metal });  // x = -1 (left wall)
+    }
+
+    RayHit CastRay(const float3& start, const float3& dir, float maxDist) override {
+        RayHit closestHit;
+        closestHit.isHit = false;
+        closestHit.distance = maxDist;
+
+        for (const auto& plane : walls) {
+            float denom = plane.normal.dot(dir);
+            if (denom < -1e-6f) {
+                float t = -(plane.normal.dot(start) + plane.distance) / denom;
+                if (t > 0.001f && t < closestHit.distance) {
+                    closestHit.distance = t;
+                    closestHit.isHit = true;
+                    closestHit.normal = plane.normal;
+                    closestHit.materialID = static_cast<int>(plane.mat);
+                }
+            }
+        }
+        return closestHit;
+    }
+
+private:
+    struct Plane {
+        float3 normal;
+        float  distance;
+        MaterialType mat;
+    };
+    std::vector<Plane> walls;
+};
+
+// 4. Complex geometry – a convex pentagonal room
+class ComplexRoomProvider : public IGeometryProvider {
+public:
+    ComplexRoomProvider() {
+        // Floor and ceiling
+        walls.push_back({ {0, 1, 0},  0.0f, MaterialType::Stone }); // floor y=0
+        walls.push_back({ {0, -1, 0}, 4.0f, MaterialType::Wood });  // ceiling y=4
+
+        // Pentagonal vertical walls (convex, vertices in counter‑clockwise order)
+        // Vertices (x,z): (5,0), (2,4), (-2,4), (-5,0), (-2,-4)
+        AddVerticalWall({ 5,0 }, { 2,4 });   // wall A
+        AddVerticalWall({ 2,4 }, { -2,4 });  // wall B
+        AddVerticalWall({ -2,4 }, { -5,0 }); // wall C
+        AddVerticalWall({ -5,0 }, { -2,-4 });// wall D
+        AddVerticalWall({ -2,-4 }, { 5,0 }); // wall E
+    }
+
+    RayHit CastRay(const float3& start, const float3& dir, float maxDist) override {
+        RayHit closestHit;
+        closestHit.isHit = false;
+        closestHit.distance = maxDist;
+
+        for (const auto& plane : walls) {
+            float denom = plane.normal.dot(dir);
+            if (denom < -1e-6f) {
+                float t = -(plane.normal.dot(start) + plane.distance) / denom;
+                if (t > 0.001f && t < closestHit.distance) {
+                    closestHit.distance = t;
+                    closestHit.isHit = true;
+                    closestHit.normal = plane.normal;
+                    closestHit.materialID = static_cast<int>(plane.mat);
+                }
+            }
+        }
+        return closestHit;
+    }
+
+private:
+    struct Plane {
+        float3 normal;
+        float  distance;
+        MaterialType mat;
+    };
+
+    void AddVerticalWall(const float2& p1, const float2& p2) {
+        // Edge vector
+        float2 edge = { p2.x - p1.x, p2.y - p1.y }; // using y as second coordinate (z in 3D)
+        // Inward normal (rotate -90° for CCW polygon)
+        float2 inNormal = { -edge.y, edge.x };
+        float len = std::sqrt(inNormal.x * inNormal.x + inNormal.y * inNormal.y);
+        inNormal.x /= len;
+        inNormal.y /= len;
+
+        float3 normal = { inNormal.x, 0.0f, inNormal.y };
+        // Plane equation: dot(normal, P) - dot(normal, p1) = 0 → distance = -dot(normal, p1)
+        float d = -(normal.x * p1.x + normal.z * p1.y); // p1.y -> z
+        walls.push_back({ normal, d, MaterialType::Stone });
+    }
+
+    std::vector<Plane> walls;
+};
+
+
+// ------------------------------------------------------------------
+// Test execution helper
+// ------------------------------------------------------------------
+void RunScenario(const std::string& name,
+    IGeometryProvider* geometry,
+    const float3& startPos,
+    const float3& movePerFrame,
+    int totalFrames,
+    float dt)
+{
+    Logger::Log("=== Starting scenario: " + name + " ===");
+
     AudioSystem audioSystem;
 
-    // Создаем геометрию на стеке (или через new, если объект большой)
-    BoxRoomProvider geometry;
-
-    Logger::Log("Geometry created: Box 10x10x4m");
-
     Settings settings;
-    settings.maxBounces = 3;            // Достаточно для теста
-    settings.useMultithreading = true;  // Тестируем многопоточность
+    settings.maxBounces = 16;
+    settings.useMultithreading = true;
     settings.maxRayDistance = 100.0f;
-    settings.updateInterval = 0.033f;
+    settings.updateInterval = dt;
 
     Logger::Log("Initializing AudioSystem (" + std::string(audioSystem.GetVersionString()) + ")...");
-    audioSystem.Initialize(&geometry, settings);
+    audioSystem.Initialize(geometry, settings);
 
-    // 2. Симуляция игрового цикла (60 кадров ~ 2 секунды)
-    // Слушатель стоит в центре комнаты (2 метра над полом)
-    float3 listenerPos(0.0f, 2.0f, 0.0f);
-    float dt = 0.033f; // ~30 FPS
-
-    Logger::Log("Running simulation loop (60 frames)...");
-    Logger::Log("Listener moving from Center (0,2,0) towards Metal Wall (+X)");
-
+    float3 listenerPos = startPos;
     bool dataValidOnce = false;
 
-    for (int i = 0; i < 60; ++i) 
-    {
-        // Эмуляция движения: слушатель идет к стене X+
-        listenerPos.x += 0.05f;
+    for (int i = 0; i < totalFrames; ++i) {
+        listenerPos.x += movePerFrame.x;
+        listenerPos.y += movePerFrame.y;
+        listenerPos.z += movePerFrame.z;
 
-        // Обновляем аудио движок
         audioSystem.Update(listenerPos, dt);
-
-        // Получаем результат
         EAXResult res = audioSystem.GetEAXResult();
 
         if (res.isValid) dataValidOnce = true;
 
-        if (i % 10 == 0) 
-        { // Логируем каждый 10-й кадр
+        if (i % 10 == 0) {
             std::string status = res.isValid ? "[VALID]" : "[WAITING]";
-            Logger::Log("Frame " + std::to_string(i) + " " + status + " | Pos: " + listenerPos.to_string());
+            Logger::Log("Frame " + std::to_string(i) + " " + status +
+                " | Pos: " + listenerPos.to_string());
 
             if (res.isValid) {
                 Logger::LogParam("Room Level (mB)", (float)res.lRoom);
@@ -104,42 +283,89 @@ void RunSimulationTest()
             }
         }
 
-        // Эмуляция времени кадра
-        std::this_thread::sleep_for(std::chrono::milliseconds(33));
+        std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<int>(dt * 1000)));
     }
 
-    if (!dataValidOnce) 
-        Logger::Log("TEST FAILED: No valid EAX data received!", true);
-    else 
-        Logger::Log("TEST PASSED: Valid data stream received.");
+    if (!dataValidOnce)
+        Logger::Log("SCENARIO " + name + " FAILED: No valid EAX data!", true);
+    else
+        Logger::Log("SCENARIO " + name + " PASSED: Valid data stream received.");
 
-    // 3. Завершение
-    Logger::Log("Shutting down system...");
     audioSystem.Shutdown();
+    Logger::Log("=== Scenario " + name + " finished ===\n");
 }
 
-int main() 
-{
-    // Инициализация логгера
-    Logger::Init("PresenceAutotest_Log.txt");
-    Logger::Log("PresenceAutotest v1.0 started");
 
-    try 
-    {
-        RunSimulationTest();
+// ------------------------------------------------------------------
+// Main
+// ------------------------------------------------------------------
+int main() {
+    Logger::Init("PresenceAutotest_Log.txt");
+    Logger::Log("PresenceAutotest v1.0 (multi‑scenario) started");
+
+    try {
+        // Scenario 1: Closed box room
+        {
+            BoxRoomProvider room;
+            // Listener in center, walking toward the metal wall (+X)
+            RunScenario("ClosedRoom",
+                &room,
+                float3(0.0f, 2.0f, 0.0f),   // start
+                float3(0.05f, 0.0f, 0.0f), // movement per frame
+                60,                          // frames
+                0.033f);
+        }
+
+        // Scenario 2: Open space (ground only)
+        {
+            OpenSpaceProvider open;
+            // Listener at (0, 1.7, 0), moving horizontally
+            RunScenario("OpenSpace",
+                &open,
+                float3(0.0f, 1.7f, 0.0f),
+                float3(0.1f, 0.0f, 0.05f),
+                60,
+                0.033f);
+        }
+
+        // Scenario 3: Long corridor
+        {
+            CorridorProvider corridor;
+            // Listener at the beginning of the corridor, walking along Z+
+            RunScenario("LongCorridor",
+                &corridor,
+                float3(0.0f, 1.5f, -18.0f),
+                float3(0.0f, 0.0f, 0.3f),
+                60,
+                0.033f);
+        }
+
+        // Scenario 4: Complex pentagonal room
+        {
+            ComplexRoomProvider complex;
+            // Listener near center, circling inside
+            RunScenario("ComplexRoom",
+                &complex,
+                float3(0.0f, 2.0f, 0.0f),
+                float3(0.0f, 0.0f, 0.0f), // we’ll update manually inside the loop?
+                60,
+                0.033f);
+            // Note: If you want a more interesting path, you can create a custom loop,
+            // but for consistency we keep the same helper. A static movement vector
+            // can be set to something like (0.05, 0, 0.05) to walk diagonally.
+        }
+
     }
-    catch (const std::exception& e) 
-    {
+    catch (const std::exception& e) {
         Logger::Log(std::string("EXCEPTION: ") + e.what(), true);
         return -1;
     }
-    catch (...) 
-    {
+    catch (...) {
         Logger::Log("UNKNOWN EXCEPTION OCCURRED", true);
         return -1;
     }
 
-    Logger::Log("Done. Press Enter to exit...");
+    Logger::Log("All scenarios completed. Press Enter to exit...");
     std::cin.get();
     return 0;
 }
