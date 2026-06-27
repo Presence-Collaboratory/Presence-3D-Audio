@@ -4,7 +4,7 @@
   High-Performance Real-time Audio Path Tracing & EAX Simulation Library
 ====================================================================================================
 
-  Copyright (c) 2026 Presence Collaboratory, NSDeathman & Gemini 3
+  Copyright (c) 2026 Presence Collaboratory, NSDeathman & Gemini 3 & DeepSeek
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -184,6 +184,8 @@ struct EAXResult
     // --- Debug information (for console output) ---
     float   debugEnclosedness;      // [0.0 ... 1.0] 1.0 = fully enclosed space
     float   debugOpenness;          // [0.0 ... 1.0] 1.0 = open field
+    float   debugMeanFreePath;
+    float   debugPhysicalVolume;
 
     EAXResult() { Reset(); }
 
@@ -207,6 +209,8 @@ struct EAXResult
         isValid = false;
         debugEnclosedness = 0.0f;
         debugOpenness = 1.0f;
+        debugMeanFreePath = 0.0f;
+        debugPhysicalVolume = 0.0f;
     }
 };
 

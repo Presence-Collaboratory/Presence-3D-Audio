@@ -4,7 +4,7 @@
   High-Performance Real-time Audio Path Tracing & EAX Simulation Library
 ====================================================================================================
 
-  Copyright (c) 2026 Presence Collaboratory, NSDeathman & Gemini 3
+  Copyright (c) 2026 Presence Collaboratory, NSDeathman & Gemini 3 & DeepSeek
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -54,11 +54,9 @@ public:
     {
         std::lock_guard<std::mutex> lock(GetInstance().logMutex);
 
-        // Вывод в консоль
         if (isError) std::cerr << "[ERROR] " << msg << std::endl;
         else         std::cout << "[INFO]  " << msg << std::endl;
 
-        // Вывод в файл
         if (GetInstance().fileStream.is_open()) {
             GetInstance().fileStream << (isError ? "[ERROR] " : "[INFO]  ") << msg << std::endl;
             GetInstance().fileStream.flush();

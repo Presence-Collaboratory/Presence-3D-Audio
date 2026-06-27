@@ -3,37 +3,22 @@
   Presence Audio SDK Integration for X-Ray Engine
   File: Sound_environment_common.h
 ====================================================================================================
-  Author: NSDeathman
-  Description: Общие структуры данных для звукового окружения.
-  Определяет формат данных EAX (Environmental Audio Extensions), используемый
-  для передачи параметров реверберации из логики движка в звуковой драйвер (OpenAL/DSound).
+
+  This header defines the data structure that represents the acoustic
+  environment of the listener at a given frame.  It follows the EAX 2.0 /
+  OpenAL EFX specification and is used to transfer reverb parameters from
+  the Presence Audio SDK to the engine's sound driver.
+
+  The structure is shared between the main thread (game logic) and the sound
+  thread, therefore its members are updated atomically via the double‑buffer
+  mechanism implemented elsewhere.
+
 ====================================================================================================
 
   Copyright (c) 2025 Presence Collaboratory, NSDeathman & Gemini 3
 
-  Permission is hereby granted, free of charge, to any person obtaining a copy
-  of this software and associated documentation files (the "Software"), to deal
-  in the Software without restriction, including without limitation the rights
-  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-  copies of the Software, and to permit persons to whom the Software is
-  furnished to do so, subject to the following conditions:
-
-  1. The above copyright notice and this permission notice shall be included in all
-	 copies or substantial portions of the Software.
-
-  2. Any project (commercial, free, open-source, or closed-source) using this Software
-	 must include attribution to "Presence Audio SDK by Presence Collaboratory" in its
-	 documentation, credits, or about screen.
-
-  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-  SOFTWARE.
-
 ====================================================================================================
+
   Developed by: NSDeathman (Architecture & Core), Gemini 3 (Optimization & Math)
   Organization: Presence Collaboratory
 ====================================================================================================
@@ -41,107 +26,187 @@
 
 #pragma once
 
-// Подключение базовых типов движка (для Fvector, u32 и т.д., если нужно)
+// Include engine base types (Fvector, u32, etc.) if needed.
 #include "../../xr_collide_defs.h"
 
 // =================================================================================================
 // EAX ENVIRONMENT DATA STRUCTURE
 // =================================================================================================
-// Структура, полностью описывающая акустические свойства помещения в данный кадр.
-// Соответствует стандарту EAX 2.0 / OpenAL EFX.
-//
-// Единицы измерения:
-// - Громкость (Level): Millibels (mB). 0 mB = 0 dB (Макс), -10000 mB = -100 dB (Тишина).
-// - Время (Time): Секунды.
-// - Расстояние (Size): Метры.
-// =================================================================================================
+/**
+ * @brief Stores all acoustic properties for a single listener position.
+ *
+ * The fields map directly to the EAX 2.0 / OpenAL EFX listener properties.
+ * Volume levels are expressed in **millibels (mB)**: 0 mB = full scale,
+ * -10000 mB = silence.  Time constants are in seconds, distances in metres.
+ *
+ * The structure is designed to be copied as a whole when the engine's
+ * sound renderer applies a new environment.  The `dwFlags` member tells
+ * the driver which parameters contain valid data.
+ */
 struct SEAXEnvironmentData
 {
-	// ---------------------------------------------------------------------------------------------
-	// Master Volume & Tone (Общая громкость и Тон)
-	// ---------------------------------------------------------------------------------------------
-	LONG lRoom; // [-10000 ... 0] Общий уровень громкости эффекта реверберации.
-	LONG lRoomHF; // [-10000 ... 0] Затухание высоких частот (Tone). Влияет на "глухоту" звука.
-	float flRoomRolloffFactor; // [0.0 ... 10.0] Коэффициент затухания эффекта с расстоянием. 0 = не затухает.
+    // =============================================================================================
+    // Master Volume & Tone
+    // =============================================================================================
 
-	// ---------------------------------------------------------------------------------------------
-	// Decay (Затухание)
-	// ---------------------------------------------------------------------------------------------
-	float flDecayTime;	  // [0.1 ... 20.0] Время полной реверберации (RT60) в секундах.
-	float flDecayHFRatio; // [0.1 ... 2.0] Отношение времени затухания ВЧ к НЧ.
-						  // < 1.0: ВЧ гаснут быстрее (натурально). > 1.0: ВЧ гаснут медленнее (синтетика).
+    /** Overall reverb volume.  Range: [-10000, 0] mB. */
+    LONG lRoom;
 
-	// ---------------------------------------------------------------------------------------------
-	// Early Reflections (Ранние отражения)
-	// ---------------------------------------------------------------------------------------------
-	LONG lReflections; // [-10000 ... 1000] Громкость первых, различимых эхо-сигналов.
-	float flReflectionsDelay; // [0.0 ... 0.3] Задержка перед приходом первого отражения (зависит от размера комнаты).
+    /** High‑frequency attenuation (affects brightness).  Range: [-10000, 0] mB. */
+    LONG lRoomHF;
 
-	// ---------------------------------------------------------------------------------------------
-	// Late Reverb (Поздняя реверберация / Хвост)
-	// ---------------------------------------------------------------------------------------------
-	LONG lReverb; // [-10000 ... 2000] Громкость диффузного "хвоста" реверберации.
-	float flReverbDelay; // [0.0 ... 0.1] Задержка начала хвоста относительно ранних отражений.
+    /**
+     * Distance‑based rolloff factor for the reverb effect.
+     * 0.0 = no rolloff, 10.0 = very fast falloff.
+     */
+    float flRoomRolloffFactor;
 
-	// ---------------------------------------------------------------------------------------------
-	// Environment Properties (Свойства среды)
-	// ---------------------------------------------------------------------------------------------
-	float flEnvironmentSize; // [1.0 ... 100.0] Масштаб помещения в метрах.
-	float flEnvironmentDiffusion; // [0.0 ... 1.0] Плотность эха. 1.0 = густое (хамам), 0.0 = зернистое (стадион).
-	float flAirAbsorptionHF; // [-100 ... 0] Поглощение звука воздухом (зависит от влажности/тумана).
+    // =============================================================================================
+    // Decay
+    // =============================================================================================
 
-	// ---------------------------------------------------------------------------------------------
-	// System Flags & State
-	// ---------------------------------------------------------------------------------------------
-	DWORD dwFlags; // Флаги EAX (EAXLISTENERFLAGS), определяющие, какие параметры активны.
+    /**
+     * Reverberation decay time (RT60) – the time in seconds for the
+     * reverb to drop by 60 dB.  Valid range: [0.1, 20.0].
+     */
+    float flDecayTime;
 
-	u32 dwFrameStamp; // Номер кадра движка, когда данные были рассчитаны (для синхронизации потоков).
-	bool bDataValid; // Флаг валидности. True, если данные были успешно рассчитаны и готовы к применению.
+    /**
+     * Ratio of high‑frequency decay time to low‑frequency decay time.
+     * < 1.0: high frequencies die faster (natural).
+     * > 1.0: high frequencies persist longer (synthetic).
+     * Valid range: [0.1, 2.0].
+     */
+    float flDecayHFRatio;
 
-	// =============================================================================================
-	// Methods
-	// =============================================================================================
+    // =============================================================================================
+    // Early Reflections
+    // =============================================================================================
 
-	SEAXEnvironmentData()
-	{
-		Reset();
-	}
+    /** Volume of the first discrete echoes.  Range: [-10000, 1000] mB. */
+    LONG lReflections;
 
-	// Сброс в дефолтное состояние
-	void Reset()
-	{
-		lRoom = -1000;
-		lRoomHF = -100;
-		flRoomRolloffFactor = 0.0f;
-		flDecayTime = 1.49f;
-		flDecayHFRatio = 0.83f;
-		lReflections = -2602;
-		flReflectionsDelay = 0.007f;
-		lReverb = 200;
-		flReverbDelay = 0.011f;
-		flEnvironmentSize = 7.5f;
-		flEnvironmentDiffusion = 1.0f;
-		flAirAbsorptionHF = -5.0f;
-		dwFlags = 0x00000001 | 0x00000002 | 0x00000004 | 0x00000008 | 0x00000010 | 0x00000020;
-	}
+    /**
+     * Delay before the first reflection reaches the listener.
+     * Depends on room size.  Range: [0.0, 0.3] seconds.
+     */
+    float flReflectionsDelay;
 
-	// Копирование данных (используется для двойной буферизации между потоками)
-	void CopyFrom(const SEAXEnvironmentData& other)
-	{
-		lRoom = other.lRoom;
-		lRoomHF = other.lRoomHF;
-		flRoomRolloffFactor = other.flRoomRolloffFactor;
-		flDecayTime = other.flDecayTime;
-		flDecayHFRatio = other.flDecayHFRatio;
-		lReflections = other.lReflections;
-		flReflectionsDelay = other.flReflectionsDelay;
-		lReverb = other.lReverb;
-		flReverbDelay = other.flReverbDelay;
-		flEnvironmentSize = other.flEnvironmentSize;
-		flEnvironmentDiffusion = other.flEnvironmentDiffusion;
-		flAirAbsorptionHF = other.flAirAbsorptionHF;
-		dwFlags = other.dwFlags;
-		dwFrameStamp = other.dwFrameStamp;
-		bDataValid = other.bDataValid;
-	}
+    // =============================================================================================
+    // Late Reverberation Tail
+    // =============================================================================================
+
+    /** Volume of the diffuse reverb tail.  Range: [-10000, 2000] mB. */
+    LONG lReverb;
+
+    /**
+     * Delay of the late reverb relative to the early reflections.
+     * Range: [0.0, 0.1] seconds.
+     */
+    float flReverbDelay;
+
+    // =============================================================================================
+    // Environment Properties
+    // =============================================================================================
+
+    /**
+     * Perceived size of the acoustic space in metres.
+     * Range: [1.0, 100.0].
+     */
+    float flEnvironmentSize;
+
+    /**
+     * Echo density (diffusion).
+     * 1.0 = dense, smooth reverb (bathroom).
+     * 0.0 = sparse, grainy echoes (stadium).
+     * Range: [0.0, 1.0].
+     */
+    float flEnvironmentDiffusion;
+
+    /**
+     * High‑frequency absorption caused by air (humidity, fog).
+     * Range: [-100, 0] (0 = no extra absorption).
+     */
+    float flAirAbsorptionHF;
+
+    // =============================================================================================
+    // System Flags & State
+    // =============================================================================================
+
+    /**
+     * Bitmask indicating which EAX parameters are valid.
+     * Typical value: 0x3F (almost all parameters active).
+     */
+    DWORD dwFlags;
+
+    /**
+     * Engine frame stamp when the data was computed.
+     * Used for synchronisation between the main and sound threads.
+     */
+    u32 dwFrameStamp;
+
+    /** Set to true when the structure contains freshly computed valid data. */
+    bool bDataValid;
+
+    // =============================================================================================
+    // Methods
+    // =============================================================================================
+
+    /**
+     * @brief Constructor – initialises the structure with neutral defaults.
+     */
+    SEAXEnvironmentData()
+    {
+        Reset();
+    }
+
+    /**
+     * @brief Resets all parameters to their default values.
+     *
+     * The defaults correspond to a generic medium‑sized room with moderate
+     * reflections and a natural decay.
+     */
+    void Reset()
+    {
+        lRoom = -1000;
+        lRoomHF = -100;
+        flRoomRolloffFactor = 0.0f;
+        flDecayTime = 1.49f;
+        flDecayHFRatio = 0.83f;
+        lReflections = -2602;
+        flReflectionsDelay = 0.007f;
+        lReverb = 200;
+        flReverbDelay = 0.011f;
+        flEnvironmentSize = 7.5f;
+        flEnvironmentDiffusion = 1.0f;
+        flAirAbsorptionHF = -5.0f;
+        dwFlags = 0x00000001 | 0x00000002 | 0x00000004 |
+            0x00000008 | 0x00000010 | 0x00000020;
+        dwFrameStamp = 0;
+        bDataValid = false;
+    }
+
+    /**
+     * @brief Copies all fields from another environment data structure.
+     *
+     * This is used when swapping the double‑buffer between threads.
+     */
+    void CopyFrom(const SEAXEnvironmentData& other)
+    {
+        lRoom = other.lRoom;
+        lRoomHF = other.lRoomHF;
+        flRoomRolloffFactor = other.flRoomRolloffFactor;
+        flDecayTime = other.flDecayTime;
+        flDecayHFRatio = other.flDecayHFRatio;
+        lReflections = other.lReflections;
+        flReflectionsDelay = other.flReflectionsDelay;
+        lReverb = other.lReverb;
+        flReverbDelay = other.flReverbDelay;
+        flEnvironmentSize = other.flEnvironmentSize;
+        flEnvironmentDiffusion = other.flEnvironmentDiffusion;
+        flAirAbsorptionHF = other.flAirAbsorptionHF;
+        dwFlags = other.dwFlags;
+        dwFrameStamp = other.dwFrameStamp;
+        bDataValid = other.bDataValid;
+    }
 };

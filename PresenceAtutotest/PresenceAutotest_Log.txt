@@ -1,0 +1,366 @@
+[INFO]  PresenceAutotest v1.0 (multi?scenario) started
+[INFO]  === Starting scenario: ClosedRoom ===
+[INFO]  Initializing AudioSystem (Presence Audio ver. 0.4)...
+[INFO]  Frame 0 [WAITING] | Pos: (0.050, 2.000, 0.000)
+[INFO]  Frame 10 [VALID] | Pos: (0.550, 2.000, 0.000)
+    Room Level (mB)          : -762.0000
+    Room HF (mB)             : -357.0000
+    Room Rolloff             : 0.0000
+    Decay Time (s)           : 0.9249
+    Decay HF Ratio           : 0.8300
+    Reflections (mB)         : -1714.0000
+    Refl Delay (s)           : 0.0120
+    Reverb (mB)              : -209.0000
+    Reverb Delay (s)         : 0.0320
+    Env Size (m)             : 7.8350
+    Env Diffusion            : 1.0000
+    Air Absorb HF            : -5.0000
+    Debug Enclosed           : 1.0000
+    Debug Openness           : 0.0000
+    Debug MFP (m)            : 4.0847
+    Debug Volume (m^3)       : 545.2092
+[INFO]  Frame 20 [VALID] | Pos: (1.050, 2.000, 0.000)
+    Room Level (mB)          : -635.0000
+    Room HF (mB)             : -481.0000
+    Room Rolloff             : 0.0000
+    Decay Time (s)           : 0.6409
+    Decay HF Ratio           : 0.8300
+    Reflections (mB)         : -1261.0000
+    Refl Delay (s)           : 0.0119
+    Reverb (mB)              : -411.0000
+    Reverb Delay (s)         : 0.0319
+    Env Size (m)             : 7.9866
+    Env Diffusion            : 1.0000
+    Air Absorb HF            : -5.0000
+    Debug Enclosed           : 1.0000
+    Debug Openness           : 0.0000
+    Debug MFP (m)            : 4.0601
+    Debug Volume (m^3)       : 535.4377
+[INFO]  Frame 30 [VALID] | Pos: (1.550, 2.000, 0.000)
+    Room Level (mB)          : -578.0000
+    Room HF (mB)             : -549.0000
+    Room Rolloff             : 0.0000
+    Decay Time (s)           : 0.4939
+    Decay HF Ratio           : 0.8300
+    Reflections (mB)         : -1038.0000
+    Refl Delay (s)           : 0.0119
+    Reverb (mB)              : -516.0000
+    Reverb Delay (s)         : 0.0319
+    Env Size (m)             : 8.0613
+    Env Diffusion            : 1.0000
+    Air Absorb HF            : -5.0000
+    Debug Enclosed           : 1.0000
+    Debug Openness           : 0.0000
+    Debug MFP (m)            : 4.0306
+    Debug Volume (m^3)       : 523.8532
+[INFO]  Frame 40 [VALID] | Pos: (2.050, 2.000, 0.000)
+    Room Level (mB)          : -546.0000
+    Room HF (mB)             : -581.0000
+    Room Rolloff             : 0.0000
+    Decay Time (s)           : 0.3406
+    Decay HF Ratio           : 0.8300
+    Reflections (mB)         : -924.0000
+    Refl Delay (s)           : 0.0117
+    Reverb (mB)              : -568.0000
+    Reverb Delay (s)         : 0.0317
+    Env Size (m)             : 7.9715
+    Env Diffusion            : 1.0000
+    Air Absorb HF            : -5.0000
+    Debug Enclosed           : 1.0000
+    Debug Openness           : 0.0000
+    Debug MFP (m)            : 3.9857
+    Debug Volume (m^3)       : 506.5386
+[INFO]  Frame 50 [VALID] | Pos: (2.550, 2.000, 0.000)
+    Room Level (mB)          : -531.0000
+    Room HF (mB)             : -597.0000
+    Room Rolloff             : 0.0000
+    Decay Time (s)           : 0.3352
+    Decay HF Ratio           : 0.8300
+    Reflections (mB)         : -865.0000
+    Refl Delay (s)           : 0.0115
+    Reverb (mB)              : -593.0000
+    Reverb Delay (s)         : 0.0315
+    Env Size (m)             : 7.8088
+    Env Diffusion            : 1.0000
+    Air Absorb HF            : -5.0000
+    Debug Enclosed           : 1.0000
+    Debug Openness           : 0.0000
+    Debug MFP (m)            : 3.9044
+    Debug Volume (m^3)       : 476.1546
+[INFO]  SCENARIO ClosedRoom PASSED: Valid data stream received.
+[INFO]  === Scenario ClosedRoom finished ===
+
+[INFO]  === Starting scenario: OpenSpace ===
+[INFO]  Initializing AudioSystem (Presence Audio ver. 0.4)...
+[INFO]  Frame 0 [WAITING] | Pos: (0.100, 1.700, 0.050)
+[INFO]  Frame 10 [VALID] | Pos: (1.100, 1.700, 0.550)
+    Room Level (mB)          : -2938.0000
+    Room HF (mB)             : -3238.0000
+    Room Rolloff             : 0.0000
+    Decay Time (s)           : 0.6772
+    Decay HF Ratio           : 0.6598
+    Reflections (mB)         : -2456.0000
+    Refl Delay (s)           : 0.1602
+    Reverb (mB)              : -1976.0000
+    Reverb Delay (s)         : 0.1000
+    Env Size (m)             : 60.8324
+    Env Diffusion            : 0.6906
+    Air Absorb HF            : -9.1250
+    Debug Enclosed           : 0.4844
+    Debug Openness           : 0.5156
+    Debug MFP (m)            : 54.4774
+    Debug Volume (m^3)       : 500000.0000
+[INFO]  Frame 20 [VALID] | Pos: (2.100, 1.700, 1.050)
+    Room Level (mB)          : -3270.0000
+    Room HF (mB)             : -3779.0000
+    Room Rolloff             : 0.0000
+    Decay Time (s)           : 0.5374
+    Decay HF Ratio           : 0.6598
+    Reflections (mB)         : -2430.0000
+    Refl Delay (s)           : 0.1602
+    Reverb (mB)              : -2349.0000
+    Reverb Delay (s)         : 0.1000
+    Env Size (m)             : 70.0047
+    Env Diffusion            : 0.6906
+    Air Absorb HF            : -9.1250
+    Debug Enclosed           : 0.4844
+    Debug Openness           : 0.5156
+    Debug MFP (m)            : 54.4774
+    Debug Volume (m^3)       : 500000.0000
+[INFO]  Frame 30 [VALID] | Pos: (3.100, 1.700, 1.550)
+    Room Level (mB)          : -3438.0000
+    Room HF (mB)             : -4051.0000
+    Room Rolloff             : 0.0000
+    Decay Time (s)           : 0.3947
+    Decay HF Ratio           : 0.6598
+    Reflections (mB)         : -2417.0000
+    Refl Delay (s)           : 0.1602
+    Reverb (mB)              : -2539.0000
+    Reverb Delay (s)         : 0.1000
+    Env Size (m)             : 74.6386
+    Env Diffusion            : 0.6906
+    Air Absorb HF            : -9.1250
+    Debug Enclosed           : 0.4844
+    Debug Openness           : 0.5156
+    Debug MFP (m)            : 54.4774
+    Debug Volume (m^3)       : 500000.0000
+[INFO]  Frame 40 [VALID] | Pos: (4.100, 1.700, 2.050)
+    Room Level (mB)          : -3523.0000
+    Room HF (mB)             : -4188.0000
+    Room Rolloff             : 0.0000
+    Decay Time (s)           : 0.3947
+    Decay HF Ratio           : 0.6598
+    Reflections (mB)         : -2410.0000
+    Refl Delay (s)           : 0.1602
+    Reverb (mB)              : -2634.0000
+    Reverb Delay (s)         : 0.1000
+    Env Size (m)             : 76.9797
+    Env Diffusion            : 0.6906
+    Air Absorb HF            : -9.1250
+    Debug Enclosed           : 0.4844
+    Debug Openness           : 0.5156
+    Debug MFP (m)            : 54.4774
+    Debug Volume (m^3)       : 500000.0000
+[INFO]  Frame 50 [VALID] | Pos: (5.100, 1.700, 2.550)
+    Room Level (mB)          : -3566.0000
+    Room HF (mB)             : -4257.0000
+    Room Rolloff             : 0.0000
+    Decay Time (s)           : 0.3947
+    Decay HF Ratio           : 0.6598
+    Reflections (mB)         : -2410.0000
+    Refl Delay (s)           : 0.1602
+    Reverb (mB)              : -2682.0000
+    Reverb Delay (s)         : 0.1000
+    Env Size (m)             : 78.1624
+    Env Diffusion            : 0.6906
+    Air Absorb HF            : -9.1250
+    Debug Enclosed           : 0.4844
+    Debug Openness           : 0.5156
+    Debug MFP (m)            : 54.4774
+    Debug Volume (m^3)       : 500000.0000
+[INFO]  SCENARIO OpenSpace PASSED: Valid data stream received.
+[INFO]  === Scenario OpenSpace finished ===
+
+[INFO]  === Starting scenario: LongCorridor ===
+[INFO]  Initializing AudioSystem (Presence Audio ver. 0.4)...
+[INFO]  Frame 0 [WAITING] | Pos: (0.000, 1.500, -17.700)
+[INFO]  Frame 10 [VALID] | Pos: (0.000, 1.500, -14.700)
+    Room Level (mB)          : -502.0000
+    Room HF (mB)             : -100.0000
+    Room Rolloff             : 0.0000
+    Decay Time (s)           : 0.8508
+    Decay HF Ratio           : 0.8300
+    Reflections (mB)         : -1651.0000
+    Refl Delay (s)           : 0.0059
+    Reverb (mB)              : -166.0000
+    Reverb Delay (s)         : 0.0259
+    Env Size (m)             : 5.7332
+    Env Diffusion            : 1.0000
+    Air Absorb HF            : -5.0000
+    Debug Enclosed           : 1.0000
+    Debug Openness           : 0.0000
+    Debug MFP (m)            : 2.0007
+    Debug Volume (m^3)       : 64.0649
+[INFO]  Frame 20 [VALID] | Pos: (0.000, 1.500, -11.700)
+    Room Level (mB)          : -250.0000
+    Room HF (mB)             : -100.0000
+    Room Rolloff             : 0.0000
+    Decay Time (s)           : 0.5313
+    Decay HF Ratio           : 0.8300
+    Reflections (mB)         : -1172.0000
+    Refl Delay (s)           : 0.0060
+    Reverb (mB)              : -349.0000
+    Reverb Delay (s)         : 0.0260
+    Env Size (m)             : 4.9139
+    Env Diffusion            : 1.0000
+    Air Absorb HF            : -5.0000
+    Debug Enclosed           : 1.0000
+    Debug Openness           : 0.0000
+    Debug MFP (m)            : 2.0513
+    Debug Volume (m^3)       : 69.0552
+[INFO]  Frame 30 [VALID] | Pos: (0.000, 1.500, -8.700)
+    Room Level (mB)          : -122.0000
+    Room HF (mB)             : -100.0000
+    Room Rolloff             : 0.0000
+    Decay Time (s)           : 0.3699
+    Decay HF Ratio           : 0.8300
+    Reflections (mB)         : -932.0000
+    Refl Delay (s)           : 0.0061
+    Reverb (mB)              : -444.0000
+    Reverb Delay (s)         : 0.0261
+    Env Size (m)             : 4.5169
+    Env Diffusion            : 1.0000
+    Air Absorb HF            : -5.0000
+    Debug Enclosed           : 1.0000
+    Debug Openness           : 0.0000
+    Debug MFP (m)            : 2.0571
+    Debug Volume (m^3)       : 69.6427
+[INFO]  Frame 40 [VALID] | Pos: (0.000, 1.500, -5.700)
+    Room Level (mB)          : -57.0000
+    Room HF (mB)             : -100.0000
+    Room Rolloff             : 0.0000
+    Decay Time (s)           : 0.2052
+    Decay HF Ratio           : 0.8300
+    Reflections (mB)         : -811.0000
+    Refl Delay (s)           : 0.0061
+    Reverb (mB)              : -491.0000
+    Reverb Delay (s)         : 0.0261
+    Env Size (m)             : 4.3182
+    Env Diffusion            : 1.0000
+    Air Absorb HF            : -5.0000
+    Debug Enclosed           : 1.0000
+    Debug Openness           : 0.0000
+    Debug MFP (m)            : 2.0578
+    Debug Volume (m^3)       : 69.7060
+[INFO]  Frame 50 [VALID] | Pos: (0.000, 1.500, -2.700)
+    Room Level (mB)          : -26.0000
+    Room HF (mB)             : -100.0000
+    Room Rolloff             : 0.0000
+    Decay Time (s)           : 0.2051
+    Decay HF Ratio           : 0.8300
+    Reflections (mB)         : -750.0000
+    Refl Delay (s)           : 0.0061
+    Reverb (mB)              : -515.0000
+    Reverb Delay (s)         : 0.0261
+    Env Size (m)             : 4.2179
+    Env Diffusion            : 1.0000
+    Air Absorb HF            : -5.0000
+    Debug Enclosed           : 1.0000
+    Debug Openness           : 0.0000
+    Debug MFP (m)            : 2.0578
+    Debug Volume (m^3)       : 69.7128
+[INFO]  SCENARIO LongCorridor PASSED: Valid data stream received.
+[INFO]  === Scenario LongCorridor finished ===
+
+[INFO]  === Starting scenario: ComplexRoom ===
+[INFO]  Initializing AudioSystem (Presence Audio ver. 0.4)...
+[INFO]  Frame 0 [WAITING] | Pos: (0.000, 2.000, 0.000)
+[INFO]  Frame 10 [VALID] | Pos: (0.000, 2.000, 0.000)
+    Room Level (mB)          : -780.0000
+    Room HF (mB)             : -374.0000
+    Room Rolloff             : 0.0000
+    Decay Time (s)           : 0.8879
+    Decay HF Ratio           : 0.8300
+    Reflections (mB)         : -1731.0000
+    Refl Delay (s)           : 0.0099
+    Reverb (mB)              : -221.0000
+    Reverb Delay (s)         : 0.0299
+    Env Size (m)             : 7.1081
+    Env Diffusion            : 1.0000
+    Air Absorb HF            : -5.0000
+    Debug Enclosed           : 1.0000
+    Debug Openness           : 0.0000
+    Debug MFP (m)            : 3.3540
+    Debug Volume (m^3)       : 301.8332
+[INFO]  Frame 20 [VALID] | Pos: (0.000, 2.000, 0.000)
+    Room Level (mB)          : -668.0000
+    Room HF (mB)             : -512.0000
+    Room Rolloff             : 0.0000
+    Decay Time (s)           : 0.5842
+    Decay HF Ratio           : 0.8300
+    Reflections (mB)         : -1290.0000
+    Refl Delay (s)           : 0.0099
+    Reverb (mB)              : -431.0000
+    Reverb Delay (s)         : 0.0299
+    Env Size (m)             : 6.9101
+    Env Diffusion            : 1.0000
+    Air Absorb HF            : -5.0000
+    Debug Enclosed           : 1.0000
+    Debug Openness           : 0.0000
+    Debug MFP (m)            : 3.3540
+    Debug Volume (m^3)       : 301.8332
+[INFO]  Frame 30 [VALID] | Pos: (0.000, 2.000, 0.000)
+    Room Level (mB)          : -608.0000
+    Room HF (mB)             : -580.0000
+    Room Rolloff             : 0.0000
+    Decay Time (s)           : 0.4313
+    Decay HF Ratio           : 0.8300
+    Reflections (mB)         : -1067.0000
+    Refl Delay (s)           : 0.0099
+    Reverb (mB)              : -537.0000
+    Reverb Delay (s)         : 0.0299
+    Env Size (m)             : 6.8101
+    Env Diffusion            : 1.0000
+    Air Absorb HF            : -5.0000
+    Debug Enclosed           : 1.0000
+    Debug Openness           : 0.0000
+    Debug MFP (m)            : 3.3540
+    Debug Volume (m^3)       : 301.8332
+[INFO]  Frame 40 [VALID] | Pos: (0.000, 2.000, 0.000)
+    Room Level (mB)          : -578.0000
+    Room HF (mB)             : -614.0000
+    Room Rolloff             : 0.0000
+    Decay Time (s)           : 0.2761
+    Decay HF Ratio           : 0.8300
+    Reflections (mB)         : -953.0000
+    Refl Delay (s)           : 0.0099
+    Reverb (mB)              : -589.0000
+    Reverb Delay (s)         : 0.0299
+    Env Size (m)             : 6.7079
+    Env Diffusion            : 1.0000
+    Air Absorb HF            : -5.0000
+    Debug Enclosed           : 1.0000
+    Debug Openness           : 0.0000
+    Debug MFP (m)            : 3.3540
+    Debug Volume (m^3)       : 301.8332
+[INFO]  Frame 50 [VALID] | Pos: (0.000, 2.000, 0.000)
+    Room Level (mB)          : -565.0000
+    Room HF (mB)             : -631.0000
+    Room Rolloff             : 0.0000
+    Decay Time (s)           : 0.2752
+    Decay HF Ratio           : 0.8300
+    Reflections (mB)         : -897.0000
+    Refl Delay (s)           : 0.0099
+    Reverb (mB)              : -617.0000
+    Reverb Delay (s)         : 0.0299
+    Env Size (m)             : 6.7079
+    Env Diffusion            : 1.0000
+    Air Absorb HF            : -5.0000
+    Debug Enclosed           : 1.0000
+    Debug Openness           : 0.0000
+    Debug MFP (m)            : 3.3540
+    Debug Volume (m^3)       : 301.8332
+[INFO]  SCENARIO ComplexRoom PASSED: Valid data stream received.
+[INFO]  === Scenario ComplexRoom finished ===
+
+[INFO]  All scenarios completed. Press Enter to exit...

@@ -4,7 +4,7 @@
   High-Performance Real-time Audio Path Tracing & EAX Simulation Library
 ====================================================================================================
 
-  Copyright (c) 2026 Presence Collaboratory, NSDeathman & Gemini 3
+  Copyright (c) 2026 Presence Collaboratory, NSDeathman & Gemini 3 & DeepSeek
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -42,6 +42,22 @@
 
 PRESENCE_BEGIN
 
+// =============================================================================================
+// VERSION INFORMATION FUNCTIONS
+// =============================================================================================
+
+/**
+    * @brief Returns library version number
+    * @return Version as float (e.g., 0.2 for version 0.2)
+    */
+PRESENCE_API float GetVersion();
+
+/**
+    * @brief Returns full version string
+    * @return Complete version information in text format
+    */
+PRESENCE_API const char* GetVersionString();
+
 // =================================================================================================
 // MAIN AUDIO SIMULATION SYSTEM
 // =================================================================================================
@@ -57,21 +73,6 @@ PRESENCE_BEGIN
 class PRESENCE_API AudioSystem : public ISoundOcclusionCalculator
 {
 public:
-    // =============================================================================================
-    // VERSION INFORMATION METHODS
-    // =============================================================================================
-
-    /**
-        * @brief Returns library version number
-        * @return Version as float (e.g., 0.2 for version 0.2)
-        */
-    static float GetVersion();
-
-    /**
-        * @brief Returns full version string
-        * @return Complete version information in text format
-        */
-    static const char* GetVersionString();
 
     // =============================================================================================
     // Constructors and Destructors
