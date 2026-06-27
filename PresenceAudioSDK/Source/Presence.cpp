@@ -4,7 +4,7 @@
   High-Performance Real-time Audio Path Tracing & EAX Simulation Library
 ====================================================================================================
 
-  Copyright (c) 2026 Presence Collaboratory, NSDeathman & Gemini 3
+  Copyright (c) 2026 Presence Collaboratory, NSDeathman & Gemini 3 & DeepSeek
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -67,10 +67,6 @@ static const int MAX_TRACKED_MATERIALS = 64;
 
 // Speed of sound in m/s, used to convert MFP to reflection delay.
 static const float SOUND_SPEED = 340.0f;
-
-// Version information
-float AudioSystem::GetVersion() { return 0.4f; }
-const char* AudioSystem::GetVersionString() { return "Presence Audio ver. 0.4"; }
 
 // =================================================================================================
 // SECTION 2: THREAD-SAFE RANDOM NUMBER GENERATOR
