@@ -50,13 +50,13 @@ PRESENCE_BEGIN
     * @brief Returns library version number
     * @return Version as float (e.g., 0.2 for version 0.2)
     */
-float GetVersion() { return 0.4f; }
+PRESENCE_API float GetVersion() { return 0.4f; }
 
 /**
     * @brief Returns full version string
     * @return Complete version information in text format
     */
-const char* GetVersionString() { return "Presence Audio ver. 0.4"; }
+PRESENCE_API const char* GetVersionString() { return "Presence Audio ver. 0.4"; }
 
 // =================================================================================================
 // MAIN AUDIO SIMULATION SYSTEM
