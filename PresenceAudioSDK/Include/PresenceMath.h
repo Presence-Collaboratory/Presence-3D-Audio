@@ -222,31 +222,6 @@ public:
         return _mm_cvtss_f32(sums);
     }
 
-    /**
-        * @brief Cross Product (Vector product).
-        * @return Vector perpendicular to both input vectors.
-        * @note Implemented using shuffles (byte permutation), without switching to scalar mode.
-        */
-    inline float3 cross(const float3& v) const noexcept 
-    {
-        // Formula: (y1*z2 - z1*y2, z1*x2 - x1*z2, x1*y2 - y1*x2)
-
-        // Permute vectors to align components for multiplication
-        __m128 a_yzx = _mm_shuffle_ps(simd_, simd_, _MM_SHUFFLE(3, 0, 2, 1)); // (y, z, x, w)
-        __m128 b_yzx = _mm_shuffle_ps(v.simd_, v.simd_, _MM_SHUFFLE(3, 0, 2, 1));
-
-        __m128 a_zxy = _mm_shuffle_ps(simd_, simd_, _MM_SHUFFLE(3, 1, 0, 2)); // (z, x, y, w)
-        __m128 b_zxy = _mm_shuffle_ps(v.simd_, v.simd_, _MM_SHUFFLE(3, 1, 0, 2));
-
-        // (y1*z2, z1*x2, ...)
-        __m128 mul1 = _mm_mul_ps(a_yzx, b_zxy);
-        // (z1*y2, x1*z2, ...)
-        __m128 mul2 = _mm_mul_ps(a_zxy, b_yzx);
-
-        // Subtraction gives the final cross product result
-        return float3(_mm_sub_ps(mul1, mul2));
-    }
-
     /** @brief Vector magnitude (Length). */
     inline float magnitude() const noexcept 
     {

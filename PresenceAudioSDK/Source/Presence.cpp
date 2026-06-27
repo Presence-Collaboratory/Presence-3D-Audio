@@ -43,17 +43,12 @@
 #include <chrono>
 #include <cstring>
 #include <random>
-#include <array>
 #include <algorithm>
 #include <condition_variable>
 #include <unordered_map>
-#include <functional>
-#include <map>
-#include <string>
 #include <memory>
 #include <stdexcept>
 
-// Parallel Patterns Library (Windows)
 #ifdef _WIN32
 #   include <ppl.h>
 #endif
@@ -64,57 +59,24 @@
 PRESENCE_BEGIN
 
 // =================================================================================================
-// UTILS & CONSTANTS
+// SECTION 1: CONSTANTS AND UTILITIES
 // =================================================================================================
+
+// Maximum number of different materials we can track acoustically.
 static const int MAX_TRACKED_MATERIALS = 64;
 
-// Sphere of directions (46 vectors)
-static const float3 sphereDirections[] =
-{
-    { 1,0,0 },
-    { -1,0,0 },
-    { 0,1,0 },
-    { 0,-1,0 },
-    { 0,0,1 },
-    { 0,0,-1 },
-    { 0.577f,0.577f,0.577f },
-    { 0.577f,0.577f,-0.577f },
-    { 0.577f,-0.577f,0.577f },
-    { 0.577f,-0.577f,-0.577f },
-    { -0.577f,0.577f,0.577f },
-    { -0.577f,0.577f,-0.577f },
-    { -0.577f,-0.577f,0.577f },
-    { -0.577f,-0.577f,-0.577f },
-    { 0,0.525f,0.850f },
-    { 0,0.525f,-0.850f },
-    { 0,-0.525f,0.850f },
-    { 0,-0.525f,-0.850f },
-    { 0.850f,0,0.525f },
-    { 0.850f,0,-0.525f },
-    { -0.850f,0,0.525f },
-    { -0.850f,0,-0.525f },
-    { 0.525f,0.850f,0 },
-    { 0.525f,-0.850f,0 },
-    { -0.525f,0.850f,0 },
-    { -0.525f,-0.850f,0 }
-};
-static const int DIRECTIONS_COUNT = sizeof(sphereDirections) / sizeof(float3);
+// Speed of sound in m/s, used to convert MFP to reflection delay.
+static const float SOUND_SPEED = 340.0f;
+
+// Version information
+float AudioSystem::GetVersion() { return 0.4f; }
+const char* AudioSystem::GetVersionString() { return "Presence Audio ver. 0.4"; }
 
 // =================================================================================================
-// VERSION INFO
-// =================================================================================================
-float AudioSystem::GetVersion()
-{
-    return 0.3f;
-}
-
-const char* AudioSystem::GetVersionString()
-{
-    return "Presence Audio ver. 0.3";
-}
-
-// =================================================================================================
-// THREAD-SAFE RANDOM GENERATOR
+// SECTION 2: THREAD-SAFE RANDOM NUMBER GENERATOR
+// -------------------------------------------------------------------------------------------------
+// Provides reproducible random directions for diffuse reflections.
+// Each thread maintains its own Mersenne Twister engine.
 // =================================================================================================
 class ThreadSafeRandom
 {
@@ -124,6 +86,7 @@ private:
     static thread_local std::unique_ptr<std::mt19937> tlsRng;
 
 public:
+    // Returns thread-local generator, initializing it with a unique seed on first access.
     static std::mt19937& Get()
     {
         if (!tlsRng)
@@ -139,23 +102,21 @@ public:
         return *tlsRng;
     }
 
+    // Random unit vector uniformly distributed over the sphere.
     static float3 Direction()
     {
         auto& rng = Get();
         std::uniform_real_distribution<float> d(-1.0f, 1.0f);
         float3 v;
-        do
-        {
-            v = float3(d(rng), d(rng), d(rng));
-        } while (v.length_sq() > 1.0f || v.length_sq() < 0.001f);
+        do { v = float3(d(rng), d(rng), d(rng)); } while (v.length_sq() > 1.0f || v.length_sq() < 0.001f);
         return v.normalize();
     }
 
+    // Random direction in the hemisphere defined by a surface normal.
     static float3 HemisphereDir(const float3& normal)
     {
         float3 d = Direction();
-        if (d.dot(normal) < 0)
-            d = d * -1.0f;
+        if (d.dot(normal) < 0) d = d * -1.0f;
         return d;
     }
 };
@@ -165,31 +126,20 @@ uint32_t ThreadSafeRandom::nextSeed = 12345;
 thread_local std::unique_ptr<std::mt19937> ThreadSafeRandom::tlsRng;
 
 // =================================================================================================
-// PROFILER
+// SECTION 3: PERFORMANCE PROFILER (OPTIONAL)
+// -------------------------------------------------------------------------------------------------
+// Lightweight instrumentation for measuring ray tracing cost.
 // =================================================================================================
 class PerformanceProfiler
 {
-    struct ThreadLocalData
-    {
-        uint64_t totalCalls = 0;
-        uint64_t totalTimeNS = 0;
-        uint64_t maxTimeNS = 0;
-    };
-    using ThreadId = std::thread::id;
-    std::unordered_map<std::string, std::unordered_map<ThreadId, ThreadLocalData>> data;
+    struct ThreadLocalData { uint64_t totalCalls = 0, totalTimeNS = 0, maxTimeNS = 0; };
+    std::unordered_map<std::string, std::unordered_map<std::thread::id, ThreadLocalData>> data;
     std::mutex mutex;
     bool enabled = false;
 
 public:
-    void SetEnabled(bool enable)
-    {
-        enabled = enable;
-    }
-
-    bool IsEnabled() const
-    {
-        return enabled;
-    }
+    void SetEnabled(bool e) { enabled = e; }
+    bool IsEnabled() const { return enabled; }
 
     class ScopedTimer
     {
@@ -197,43 +147,37 @@ public:
         const char* name;
         std::chrono::high_resolution_clock::time_point start;
         bool active;
-
     public:
-        ScopedTimer(const char* timerName, PerformanceProfiler& prof)
-            : profiler(prof)
-            , name(timerName)
-            , active(profiler.IsEnabled())
+        ScopedTimer(const char* n, PerformanceProfiler& p)
+            : profiler(p), name(n), active(p.IsEnabled())
         {
-            if (active)
-                start = std::chrono::high_resolution_clock::now();
+            if (active) start = std::chrono::high_resolution_clock::now();
         }
-
         ~ScopedTimer()
         {
             if (active)
-            {
-                auto end = std::chrono::high_resolution_clock::now();
                 profiler.Record(name,
-                    std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count());
-            }
+                    std::chrono::duration_cast<std::chrono::nanoseconds>(
+                        std::chrono::high_resolution_clock::now() - start).count());
         }
     };
 
     void Record(const char* timerName, uint64_t ns)
     {
         std::lock_guard<std::mutex> lock(mutex);
-        auto& threadData = data[timerName][std::this_thread::get_id()];
-        threadData.totalCalls++;
-        threadData.totalTimeNS += ns;
-        threadData.maxTimeNS = std::max(threadData.maxTimeNS, ns);
+        auto& td = data[timerName][std::this_thread::get_id()];
+        td.totalCalls++;
+        td.totalTimeNS += ns;
+        if (ns > td.maxTimeNS) td.maxTimeNS = ns;
     }
 };
 
-#define PROFILE_SCOPE(name) \
-    Presence::PerformanceProfiler::ScopedTimer __timer(name, profiler)
+#define PROFILE_SCOPE(name) Presence::PerformanceProfiler::ScopedTimer __timer(name, profiler)
 
 // =================================================================================================
-// MATERIAL SYSTEM
+// SECTION 4: MATERIAL SYSTEM
+// -------------------------------------------------------------------------------------------------
+// Stores acoustic parameters for each material type.
 // =================================================================================================
 class MaterialSystem
 {
@@ -244,22 +188,20 @@ public:
     MaterialSystem()
     {
         materials.resize(static_cast<int>(MaterialType::Count));
-        Set(static_cast<int>(MaterialType::Air),      { 1.00f, 0.00f, 0.00f, 0.00f });
-        Set(static_cast<int>(MaterialType::Stone),    { 0.15f, 0.70f, 0.15f, 0.70f });
-        Set(static_cast<int>(MaterialType::Metal),    { 0.10f, 0.95f, 0.05f, 0.80f });
-        Set(static_cast<int>(MaterialType::Wood),     { 0.40f, 0.30f, 0.40f, 0.30f });
-        Set(static_cast<int>(MaterialType::Soft),     { 0.80f, 0.10f, 0.80f, 0.10f });
-        Set(static_cast<int>(MaterialType::Glass),    { 0.30f, 0.85f, 0.05f, 0.60f });
+        Set(static_cast<int>(MaterialType::Air), { 1.00f, 0.00f, 0.00f, 0.00f });
+        Set(static_cast<int>(MaterialType::Stone), { 0.15f, 0.70f, 0.15f, 0.70f });
+        Set(static_cast<int>(MaterialType::Metal), { 0.10f, 0.95f, 0.05f, 0.80f });
+        Set(static_cast<int>(MaterialType::Wood), { 0.40f, 0.30f, 0.40f, 0.30f });
+        Set(static_cast<int>(MaterialType::Soft), { 0.80f, 0.10f, 0.80f, 0.10f });
+        Set(static_cast<int>(MaterialType::Glass), { 0.30f, 0.85f, 0.05f, 0.60f });
         Set(static_cast<int>(MaterialType::Absorber), { 0.00f, 0.01f, 0.99f, 0.01f });
     }
 
     bool Set(int id, const MaterialParams& p)
     {
         std::unique_lock<std::shared_mutex> lock(mutex);
-        if (id >= 0)
-        {
-            if (id >= static_cast<int>(materials.size()))
-                materials.resize(id + 1);
+        if (id >= 0) {
+            if (id >= static_cast<int>(materials.size())) materials.resize(id + 1);
             materials[id] = p;
             return true;
         }
@@ -276,27 +218,19 @@ public:
     MaterialParams Get(int id) const
     {
         std::shared_lock<std::shared_mutex> lock(mutex);
-        if (id < 0 || id >= static_cast<int>(materials.size()))
-            return materials[0];
-        return materials[id];
-    }
-
-    float GetStepSize(int id) const
-    {
-        return (Get(id).transmission > 0.5f) ? 0.2f : 0.4f;
+        return (id >= 0 && id < static_cast<int>(materials.size())) ? materials[id] : materials[0];
     }
 };
 
 // =================================================================================================
-// OCCLUSION CALCULATOR
+// SECTION 5: OCCLUSION CALCULATOR
+// -------------------------------------------------------------------------------------------------
+// Estimates direct sound occlusion between two points.
 // =================================================================================================
 class OcclusionCalculator
 {
 public:
-    struct Config
-    {
-        float maxDistance = 80.0f;
-    };
+    struct Config { float maxDistance = 80.0f; };
 
 private:
     IGeometryProvider* provider;
@@ -304,31 +238,20 @@ private:
     PerformanceProfiler& profiler;
     Config config;
 
-    struct CacheEntry
-    {
-        float occlusion;
-        uint64_t lastFrame;
-        float3 lPos;
-        float3 sPos;
-    };
+    // Simple cache for recently computed occlusion values.
+    struct CacheEntry { float occlusion; uint64_t lastFrame; float3 lPos, sPos; };
     mutable std::unordered_map<uint64_t, CacheEntry> cache;
     mutable std::unordered_map<uint64_t, float> history;
     mutable std::mutex cacheMutex;
     uint64_t currentFrame = 0;
 
 public:
-    OcclusionCalculator(IGeometryProvider* p, const MaterialSystem& m, PerformanceProfiler& prof)
-        : provider(p)
-        , materials(m)
-        , profiler(prof)
-    {
-    }
+    OcclusionCalculator(IGeometryProvider* p, const MaterialSystem& m, PerformanceProfiler& pr)
+        : provider(p), materials(m), profiler(pr) {}
 
-    void SetConfig(const Config& c)
-    {
-        config = c;
-    }
+    void SetConfig(const Config& c) { config = c; }
 
+    // Periodic cache cleanup (called from the physics loop).
     void Tick()
     {
         std::lock_guard<std::mutex> lock(cacheMutex);
@@ -337,44 +260,35 @@ public:
         {
             for (auto it = cache.begin(); it != cache.end(); )
             {
-                if (currentFrame - it->second.lastFrame > 30)
-                    it = cache.erase(it);
-                else
-                    ++it;
+                if (currentFrame - it->second.lastFrame > 30) it = cache.erase(it);
+                else ++it;
             }
-            if (history.size() > 2000)
-                history.clear();
+            if (history.size() > 2000) history.clear();
         }
     }
 
+    // Returns occlusion factor [0..1] between two positions.
     float Calculate(const float3& listenerPos, const float3& sourcePos) const
     {
         float3 dir = sourcePos - listenerPos;
         float dist = dir.magnitude();
-        if (dist < 0.5f)
-            return 1.0f;
-        if (dist > config.maxDistance)
-            return 0.0f;
+        if (dist < 0.5f) return 1.0f;
+        if (dist > config.maxDistance) return 0.0f;
         dir = dir.normalize();
 
         RayHit hit = provider->CastRay(listenerPos, dir, dist);
-        if (!hit.isHit)
-            return 1.0f;
+        if (!hit.isHit) return 1.0f;
 
-        float energy = 1.0f;
-        float trans = materials.Get(hit.materialID).transmission;
-        energy *= trans;
-
+        float energy = materials.Get(hit.materialID).transmission;
         if (energy > 0.1f)
         {
             float3 p = listenerPos;
             p.mad(dir, hit.distance + 0.5f);
-            float remainingDist = dist - hit.distance - 0.5f;
-            if (remainingDist > 0)
+            float remaining = dist - hit.distance - 0.5f;
+            if (remaining > 0)
             {
-                RayHit h2 = provider->CastRay(p, dir, remainingDist);
-                if (h2.isHit)
-                    energy *= materials.Get(h2.materialID).transmission;
+                RayHit h2 = provider->CastRay(p, dir, remaining);
+                if (h2.isHit) energy *= materials.Get(h2.materialID).transmission;
             }
         }
         return std::max(energy, 0.0f);
@@ -382,47 +296,64 @@ public:
 };
 
 // =================================================================================================
-// MAIN SYSTEM IMPL
+// SECTION 6: MAIN SYSTEM IMPLEMENTATION (AudioSystem::Impl)
+// -------------------------------------------------------------------------------------------------
+// Contains the full acoustic simulation: ray tracing, statistical analysis, EAX mapping.
 // =================================================================================================
 class AudioSystem::Impl
 {
 public:
+    // External dependencies
     IGeometryProvider* provider = nullptr;
     Settings settings;
     PerformanceProfiler profiler;
     MaterialSystem materials;
 
+    // Occlusion sub-system
     std::unique_ptr<OcclusionCalculator> occlusion;
-    std::unique_ptr<std::thread> workerThread;
 
+    // Background worker for asynchronous tracing
+    std::unique_ptr<std::thread> workerThread;
     std::mutex mutex;
     std::condition_variable cv;
     std::atomic<bool> stopThread{ false };
     std::atomic<bool> workPending{ false };
     std::atomic<bool> initialized{ false };
 
+    // Listener state
     float3 targetPos;
     float3 lastPos;
-    float fog = 0.0f;
+    float fog = 0.0f;                // 0 = clear, 1 = dense fog
 
+    // Fibonacci sphere directions (64 rays)
+    std::vector<float3> directions;
+
+    // Exponentially smoothed acoustic metrics
+    float smoothedMFP = 5.0f;
+    float smoothedHitRatio = 0.5f;
+    float smoothedReflectivity = 0.3f;
+
+    // Per-frame context for ray tracing statistics
     struct AnalysisContext
     {
         float3 cameraPosition;
         int frameCount = 0;
 
-        // New metrics for accuracy
-        float rawTotalDist = 0.0f;   // Unweighted geometric distance sum
-        int totalSegments = 0;       // Total number of path segments traced
+        // Total geometric distance (for diagnostics)
+        float rawTotalDist = 0.0f;
+        int totalSegments = 0;
 
-        // Old energy-weighted metrics (for reverb tail calc)
+        // Energy-weighted distance (legacy, not used in final model)
         float energyWeightedDist = 0.0f;
 
-        // Openness metric
-        int firstHitCount = 0;       // How many rays hit something immediately
+        // First-bounce statistics
+        int firstHitCount = 0;        // how many rays hit geometry on the first bounce
+        float firstHitDistSum = 0.0f; // sum of those distances
 
+        // Material hit counters (per frame, cleared each Reset())
         int materialHits[MAX_TRACKED_MATERIALS] = { 0 };
 
-        // Results
+        // Computed physical quantities (updated after smoothing)
         float physicalVolume = 100.0f;
         float meanFreePath = 5.0f;
         float physicalReflectivity = 0.3f;
@@ -434,32 +365,27 @@ public:
         void Reset()
         {
             frameCount = 0;
-            rawTotalDist = 0;
+            rawTotalDist = 0.0f;
             totalSegments = 0;
-            energyWeightedDist = 0;
+            energyWeightedDist = 0.0f;
             firstHitCount = 0;
+            firstHitDistSum = 0.0f;
             std::memset(materialHits, 0, sizeof(materialHits));
         }
 
-        static float Lerp(float a, float b, float t)
-        {
-            return a + (b - a) * t;
-        }
-
-        static float Clamp(float v, float minVal, float maxVal)
-        {
-            return (v < minVal) ? minVal : (v > maxVal) ? maxVal : v;
-        }
+        static float Lerp(float a, float b, float t) { return a + (b - a) * t; }
+        static float Clamp(float v, float lo, float hi) { return (v < lo) ? lo : (v > hi) ? hi : v; }
     } context;
 
+    // EAX results
     EAXResult targetEAX;
     EAXResult currentEAX;
 
-    ~Impl()
-    {
-        Shutdown();
-    }
+    ~Impl() { Shutdown(); }
 
+    // ---------------------------------------------------------------------------------------------
+    // Initialization and shutdown
+    // ---------------------------------------------------------------------------------------------
     void Init(IGeometryProvider* p, const Settings& s)
     {
         provider = p;
@@ -467,6 +393,20 @@ public:
         occlusion = std::make_unique<OcclusionCalculator>(p, materials, profiler);
         initialized = true;
         context.Reset();
+
+        // Generate 64 uniformly distributed directions using Fibonacci sphere.
+        constexpr int N = 64;
+        directions.resize(N);
+        const float goldenRatio = (1.0f + std::sqrt(5.0f)) / 2.0f;
+        for (int i = 0; i < N; ++i)
+        {
+            float theta = 2.0f * PI * i / goldenRatio;   // azimuth
+            float phi = std::acos(1.0f - 2.0f * (i + 0.5f) / N); // polar angle
+            directions[i] = float3(std::sin(phi) * std::cos(theta),
+                std::cos(phi),
+                std::sin(phi) * std::sin(theta));
+        }
+
         if (settings.useMultithreading)
             workerThread = std::make_unique<std::thread>(&Impl::PhysicsLoop, this);
     }
@@ -481,271 +421,276 @@ public:
                 stopThread = true;
             }
             cv.notify_all();
-            if (workerThread->joinable())
-                workerThread->join();
+            if (workerThread->joinable()) workerThread->join();
             workerThread.reset();
         }
     }
 
     // ---------------------------------------------------------------------------------------------
-    // MATH: CalculatePhysics (Improved MFP)
+    // EAX Parameter Mapping
     // ---------------------------------------------------------------------------------------------
-    void CalculatePhysics()
-    {
-        float numRays = static_cast<float>(DIRECTIONS_COUNT);
-        float totalFrames = std::max(static_cast<float>(context.frameCount), 1.0f);
-
-        // 1. Mean Free Path (MFP)
-        // Use average segment length, not total path length
-        float totalSegments = std::max(static_cast<float>(context.totalSegments), 1.0f);
-        float avgSegment = context.rawTotalDist / totalSegments;
-        context.meanFreePath = std::max(avgSegment, 0.5f);
-
-        // 2. Geometric Enclosedness (ratio of rays that hit something vs sky)
-        float totalFirstHits = static_cast<float>(context.firstHitCount) / totalFrames;
-        float hitRatio = totalFirstHits / numRays;
-        context.geometricEnclosedness = AnalysisContext::Clamp(hitRatio, 0.0f, 1.0f);
-        context.geometricOpenness = 1.0f - context.geometricEnclosedness;
-
-        // 3. Physical Volume
-        // V = 4/3 * PI * R^3. Using MFP as radius gives a good approximation for convex rooms.
-        // For a 10x10x4 room, MFP ~ 4.5m. V ~ 380m^3. Size ~ 7.2m.
-        float estVol = (4.0f / 3.0f) * PI * std::pow(context.meanFreePath, 3.0f);
-        if (context.geometricOpenness > 0.6f)
-            estVol = std::min(estVol, 50000.0f);
-        context.physicalVolume = AnalysisContext::Clamp(estVol, 10.0f, 500000.0f);
-
-        // 4. Physical Reflectivity
-        float totalMaterialHits = 0;
-        float accumRefl = 0;
-        for (int i = 0; i < MAX_TRACKED_MATERIALS; ++i)
-        {
-            if (context.materialHits[i] > 0)
-            {
-                float hits = static_cast<float>(context.materialHits[i]) / totalFrames;
-                totalMaterialHits += hits;
-                accumRefl += hits * materials.Get(i).rt60_weight;
-            }
-        }
-        float baseReflectivity = (totalMaterialHits > 0) ? (accumRefl / totalMaterialHits) : 0.1f;
-        float effectiveReflectivity = baseReflectivity *
-            (1.0f - context.geometricOpenness * 0.8f);
-        context.physicalReflectivity = AnalysisContext::Clamp(effectiveReflectivity, 0.05f, 0.95f);
-        context.perceivedReflectivity = std::pow(context.physicalReflectivity, 0.5f);
-
-        // 5. Reverb Time (Eyring)
-        float surfArea = 6.0f * std::pow(context.physicalVolume, 2.0f / 3.0f);
-        float absCoeff = AnalysisContext::Clamp(1.0f - context.physicalReflectivity, 0.01f, 0.99f);
-        float rt60 = 0.161f * context.physicalVolume /
-            (-surfArea * std::log(1.0f - absCoeff));
-
-        // Tweaks
-        if (context.physicalVolume < 150.0f)
-            rt60 *= std::max(0.3f, context.physicalVolume / 150.0f);
-        if (context.geometricOpenness > 0.4f)
-        {
-            rt60 *= AnalysisContext::Clamp(
-                1.0f - (context.geometricOpenness - 0.4f) * 1.8f,
-                0.1f,
-                1.0f
-            );
-        }
-        context.reverbTime = AnalysisContext::Clamp(rt60, 0.1f, 8.0f);
-    }
-
+    // Translates the physically computed metrics (MFP, reflectivity, openness) into EAX parameters.
+    // All transitions are continuous – no hard thresholds.
+    // ---------------------------------------------------------------------------------------------
     void ComputeEAX()
     {
-        CalculatePhysics();
-
         EAXResult eax;
         eax.isValid = true;
+
+        // Debug outputs
         eax.debugEnclosedness = context.geometricEnclosedness;
         eax.debugOpenness = context.geometricOpenness;
+        eax.debugMeanFreePath = context.meanFreePath;
+        eax.debugPhysicalVolume = context.physicalVolume;
 
-        float fogVal = AnalysisContext::Clamp(fog, 0.0f, 1.0f);
-        float open = context.geometricOpenness;
-
-        // Room
-        float roomInt = 0.3f + (0.7f * context.geometricEnclosedness);
-        roomInt *= std::sqrt(context.perceivedReflectivity);
-        if (open > 0.4f)
-        {
-            float t = AnalysisContext::Clamp((open - 0.4f) / 0.6f, 0.0f, 1.0f);
-            roomInt *= AnalysisContext::Clamp(1.0f - (t * t), 0.1f, 1.0f);
-        }
-        float val = AnalysisContext::Lerp(-4000.0f, 400.0f,
-            AnalysisContext::Clamp(roomInt - (fogVal * 0.4f), 0.0f, 1.1f));
-        eax.lRoom = static_cast<int32_t>(val);
-        if (context.physicalVolume < 70.0f && context.geometricEnclosedness > 0.8f)
-            eax.lRoom += 500;
-        eax.lRoom = static_cast<int32_t>(
-            AnalysisContext::Clamp(static_cast<float>(eax.lRoom), -10000.0f, 600.0f));
-
-        // Decay
-        eax.flDecayTime = context.reverbTime;
-        if (fogVal > 0.5f)
-            eax.flDecayTime *= 0.8f;
-
-        // Reflections
-        float reflScale = (open > 0.6f) ? 0.8f : 1.0f;
-        float reflectionsVal = AnalysisContext::Lerp(-2500.0f, 200.0f,
-            context.physicalReflectivity * reflScale);
-        eax.lReflections = static_cast<int32_t>(
-            AnalysisContext::Clamp(reflectionsVal, -10000.0f, 500.0f));
-
-        float baseDelay = context.meanFreePath / 340.0f; // MFP is now accurate (~5m -> 0.015s)
-        if (open > 0.6f)
-            baseDelay *= 1.5f;
-        eax.flReflectionsDelay = AnalysisContext::Clamp(baseDelay, 0.0f, 0.3f);
-
-        // Reverb
-        float reverbVal = AnalysisContext::Lerp(-3000.0f, 0.0f, roomInt);
-        if (open > 0.7f)
-            reverbVal -= 600.0f;
-        eax.lReverb = static_cast<int32_t>(
-            AnalysisContext::Clamp(reverbVal, -10000.0f, 200.0f));
-        eax.flReverbDelay = AnalysisContext::Clamp(eax.flReflectionsDelay + 0.02f, 0.0f, 0.1f);
-
-        // Tone
-        float hfLoss = -100.0f;
-        float outdoorCut = open * -1200.0f;
-        float roomHFVal = static_cast<float>(eax.lRoom) + hfLoss + outdoorCut;
-        eax.lRoomHF = static_cast<int32_t>(
-            AnalysisContext::Clamp(roomHFVal, -10000.0f, -100.0f));
-
-        eax.flDecayHFRatio = (open > 0.6f) ? 0.5f : 0.83f;
-        eax.flEnvironmentDiffusion = (open > 0.7f) ? 0.6f : 1.0f;
-        eax.flAirAbsorptionHF = -5.0f + (open * -8.0f) - (fogVal * 5.0f);
-
-        // Env Size: side length of the acoustic space (Volume^(1/3))
+        // Environment size = cubic root of the estimated physical volume
         eax.flEnvironmentSize = std::pow(context.physicalVolume, 1.0f / 3.0f);
 
+        // Convenient local aliases
+        const float fogVal = AnalysisContext::Clamp(fog, 0.0f, 1.0f);
+        const float open = context.geometricOpenness;          // 0 = fully enclosed, 1 = open field
+        const float enclosed = context.geometricEnclosedness;      // 1 = fully enclosed
+        const float percRefl = context.perceivedReflectivity;      // sqrt(physicalReflectivity)
+        const float mfp = context.meanFreePath;
+        const float rt60 = context.reverbTime;
+
+        // Smooth suppression factor: 1.0 when enclosed, 0.15 when completely open.
+        const float opennessSuppression = 1.0f - 0.85f * open;
+
+        // ---- 1. Room Level (overall reverb volume) ----
+        float roomInt = (0.3f + 0.7f * enclosed) * percRefl;  // base intensity
+        roomInt *= opennessSuppression;                        // continuous reduction by openness
+        roomInt = AnalysisContext::Clamp(roomInt - fogVal * 0.4f, 0.0f, 1.1f);
+
+        float room_mB = AnalysisContext::Lerp(-4000.0f, 400.0f, roomInt);
+
+        // Boost for very small, enclosed rooms
+        if (context.physicalVolume < 70.0f && enclosed > 0.8f)
+            room_mB += 500.0f;
+
+        eax.lRoom = static_cast<int32_t>(AnalysisContext::Clamp(room_mB, -10000.0f, 600.0f));
+        eax.lRoom = std::min(eax.lRoom, 0);   // EAX allows 0 as maximum
+
+        // ---- 2. Decay Time (RT60) ----
+        eax.flDecayTime = rt60;
+        if (fogVal > 0.5f) eax.flDecayTime *= 0.8f;
+
+        // ---- 3. Early Reflections ----
+        float reflVolume = context.physicalReflectivity * opennessSuppression;
+        float refl_mB = AnalysisContext::Lerp(-2500.0f, 200.0f, reflVolume);
+        eax.lReflections = static_cast<int32_t>(AnalysisContext::Clamp(refl_mB, -10000.0f, 500.0f));
+
+        float reflDelay = mfp / SOUND_SPEED;
+        if (open > 0.6f) reflDelay *= 1.5f;
+        eax.flReflectionsDelay = AnalysisContext::Clamp(reflDelay, 0.0f, 0.3f);
+
+        // ---- 4. Late Reverberation Tail ----
+        float reverb_mB = AnalysisContext::Lerp(-3000.0f, 0.0f, roomInt);
+        if (open > 0.7f) reverb_mB -= 600.0f;
+        eax.lReverb = static_cast<int32_t>(AnalysisContext::Clamp(reverb_mB, -10000.0f, 200.0f));
+        eax.flReverbDelay = AnalysisContext::Clamp(eax.flReflectionsDelay + 0.02f, 0.0f, 0.1f);
+
+        // ---- 5. High-frequency behaviour ----
+        const float hfLoss = -100.0f;
+        const float outdoorHF = open * -1200.0f;
+        float roomHF_mB = static_cast<float>(eax.lRoom) + hfLoss + outdoorHF;
+        eax.lRoomHF = static_cast<int32_t>(AnalysisContext::Clamp(roomHF_mB, -10000.0f, -100.0f));
+
+        eax.flDecayHFRatio = AnalysisContext::Lerp(0.83f, 0.5f, open);
+        eax.flEnvironmentDiffusion = AnalysisContext::Lerp(1.0f, 0.6f,
+            AnalysisContext::Clamp(open * 1.5f, 0.0f, 1.0f));
+        eax.flAirAbsorptionHF = -5.0f + open * -8.0f - fogVal * 5.0f;
+        eax.flRoomRolloffFactor = 0.0f;
+
+        // Thread-safe publication
         {
             std::lock_guard<std::mutex> lock(mutex);
             targetEAX = eax;
         }
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // Background Physics Loop
+    // ---------------------------------------------------------------------------------------------
+    // 1. Traces 64 rays with up to settings.maxBounces reflections.
+    // 2. Computes per-frame statistics (hit ratio, MFP, reflectivity).
+    // 3. Applies exponential smoothing to stabilise metrics.
+    // 4. Derives physical volume and reverb time (simplified Eyring formula).
+    // 5. Calls ComputeEAX to map to EAX parameters.
+    // ---------------------------------------------------------------------------------------------
     void PhysicsLoop()
     {
+        bool firstFrame = true;
+
         while (!stopThread)
         {
+            // Wait for a new listener position
             float3 curPos;
             {
                 std::unique_lock<std::mutex> lock(mutex);
                 cv.wait(lock, [this] { return workPending || stopThread; });
-                if (stopThread)
-                    break;
+                if (stopThread) break;
                 curPos = targetPos;
                 workPending = false;
             }
 
-            if (lastPos.distance_to(curPos) > 0.5f)
-            {
-                context.Reset();
-                lastPos = curPos;
-            }
+            // Start fresh per-frame context
+            context.Reset();
             context.cameraPosition = curPos;
 
+            // ---- Ray Tracing ----
             {
                 PROFILE_SCOPE("EAX::Trace");
-                for (int i = 0; i < DIRECTIONS_COUNT; ++i)
+
+                const int numRays = static_cast<int>(directions.size());
+                for (int i = 0; i < numRays; ++i)
                 {
                     float energy = 1.0f;
                     float3 pos = curPos;
-                    float3 dir = sphereDirections[i];
+                    float3 dir = directions[i];
 
-                    for (int b = 0; b < settings.maxBounces; ++b)
+                    for (int bounce = 0; bounce < settings.maxBounces; ++bounce)
                     {
                         RayHit hit = provider->CastRay(pos, dir, settings.maxRayDistance);
-
-                        // Hit nothing (sky)
                         if (!hit.isHit)
                         {
-                            // Treat sky as a segment of max length
+                            // Ray escaped – treat as infinite distance (capped by maxRayDistance)
                             context.rawTotalDist += settings.maxRayDistance;
                             context.totalSegments++;
                             context.energyWeightedDist += settings.maxRayDistance * energy;
                             break;
                         }
 
-                        // Hit wall
-                        // 1. Geometric data (unweighted)
                         context.rawTotalDist += hit.distance;
                         context.totalSegments++;
-
-                        // 2. Acoustic data (weighted)
                         context.energyWeightedDist += hit.distance * energy;
 
-                        // 3. Openness check
-                        if (b == 0)
+                        if (bounce == 0)
+                        {
                             context.firstHitCount++;
+                            context.firstHitDistSum += hit.distance;
+                        }
 
-                        // 4. Material
                         if (hit.materialID >= 0 && hit.materialID < MAX_TRACKED_MATERIALS)
                             context.materialHits[hit.materialID]++;
 
                         energy *= (1.0f - materials.Get(hit.materialID).absorption);
-                        if (energy < 0.05f)
-                            break;
+                        if (energy < 0.05f) break;   // negligible contribution
 
                         pos.mad(dir, hit.distance - 0.05f);
-                        dir = ThreadSafeRandom::HemisphereDir(hit.normal);
+                        dir = ThreadSafeRandom::HemisphereDir(hit.normal);   // diffuse reflection
                     }
                 }
             }
 
-            context.frameCount++;
+            // ---- Per-frame statistics ----
+            const float numRaysF = static_cast<float>(directions.size());
+            const float hitCountF = static_cast<float>(context.firstHitCount);
+
+            // Hit ratio (fraction of rays that immediately hit geometry)
+            float rawHitRatio = hitCountF / numRaysF;
+
+            // Hybrid Mean Free Path: treats misses as maxRayDistance.
+            float rawMFP = (context.firstHitDistSum + (numRaysF - hitCountF) * settings.maxRayDistance) / numRaysF;
+
+            // Material-weighted average reflectivity
+            float totalHits = 0.0f, accumRefl = 0.0f;
+            for (int i = 0; i < MAX_TRACKED_MATERIALS; ++i)
+            {
+                if (context.materialHits[i] > 0)
+                {
+                    float h = static_cast<float>(context.materialHits[i]);
+                    totalHits += h;
+                    accumRefl += h * materials.Get(i).rt60_weight;
+                }
+            }
+            float rawReflectivity = (totalHits > 0.0f) ? (accumRefl / totalHits) : 0.1f;
+            float rawOpenness = 1.0f - rawHitRatio;
+            rawReflectivity *= (1.0f - rawOpenness * 0.8f);
+            rawReflectivity = AnalysisContext::Clamp(rawReflectivity, 0.05f, 0.95f);
+
+            // ---- Exponential Smoothing ----
+            const float smoothing = 0.2f;  // time constant ~5 frames
+            if (firstFrame)
+            {
+                smoothedMFP = rawMFP;
+                smoothedHitRatio = rawHitRatio;
+                smoothedReflectivity = rawReflectivity;
+                firstFrame = false;
+            }
+            else
+            {
+                smoothedMFP = smoothedMFP * (1.0f - smoothing) + rawMFP * smoothing;
+                smoothedHitRatio = smoothedHitRatio * (1.0f - smoothing) + rawHitRatio * smoothing;
+                smoothedReflectivity = smoothedReflectivity * (1.0f - smoothing) + rawReflectivity * smoothing;
+            }
+
+            // ---- Apply smoothed values to context ----
+            context.meanFreePath = smoothedMFP;
+            context.geometricEnclosedness = smoothedHitRatio;
+            context.geometricOpenness = 1.0f - smoothedHitRatio;
+            context.physicalReflectivity = smoothedReflectivity;
+            context.perceivedReflectivity = std::sqrt(smoothedReflectivity);
+
+            // ---- Physical Volume Estimation ----
+            // Using a cubic approximation: V = 8 * MFP^3  (works for typical convex rooms).
+            float estVol = 8.0f * std::pow(smoothedMFP, 3.0f);
+            if (context.geometricOpenness > 0.6f)
+                estVol = std::min(estVol, 50000.0f);   // cap for open areas
+            context.physicalVolume = AnalysisContext::Clamp(estVol, 10.0f, 500000.0f);
+
+            // ---- Reverberation Time (RT60) ----
+            // Based on simplified Eyring formula: RT60 = 0.04025 * MFP / (-ln(1 - α))
+            // where α = 1 - physicalReflectivity.
+            float absCoeff = AnalysisContext::Clamp(1.0f - smoothedReflectivity, 0.01f, 0.99f);
+            float rt60 = 0.04025f * smoothedMFP / (-std::log(1.0f - absCoeff));
+            // Openness reduces RT60 (energy escapes).
+            rt60 *= (1.0f - 0.95f * context.geometricOpenness);
+            context.reverbTime = AnalysisContext::Clamp(rt60, 0.05f, 8.0f);
+
+            // ---- Generate EAX parameters ----
             ComputeEAX();
-            if (occlusion)
-                occlusion->Tick();
-            std::this_thread::sleep_for(std::chrono::milliseconds(33));
+            if (occlusion) occlusion->Tick();
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(33));   // ~30 updates/sec
         }
     }
 };
 
 // =================================================================================================
-// PUBLIC API
+// SECTION 7: PUBLIC API (AudioSystem)
+// -------------------------------------------------------------------------------------------------
+// Thin wrappers forwarding to the Impl.
 // =================================================================================================
 
-AudioSystem::AudioSystem()
-    : m_Impl(new Impl())
-{
-}
-
-AudioSystem::~AudioSystem()
-{
-    Shutdown();
-    delete m_Impl;
-}
+AudioSystem::AudioSystem() : m_Impl(new Impl()) {}
+AudioSystem::~AudioSystem() { Shutdown(); delete m_Impl; }
 
 void AudioSystem::Initialize(IGeometryProvider* p, const Settings& s)
 {
-    if (m_Impl)
-        m_Impl->Init(p, s);
+    if (m_Impl) m_Impl->Init(p, s);
 }
 
 void AudioSystem::Shutdown()
 {
-    if (m_Impl)
-        m_Impl->Shutdown();
+    if (m_Impl) m_Impl->Shutdown();
 }
 
+// Linear interpolation of EAX parameters with per-frame smoothing.
 template <typename T>
 static T LerpEAX(T current, T target, float step)
 {
     float diff = static_cast<float>(target - current);
-    if (std::abs(diff) < 0.1f)
-        return target;
+    if (std::abs(diff) < 0.1f) return target;
     return static_cast<T>(static_cast<float>(current) + diff * step);
 }
 
 void AudioSystem::Update(const float3& pos, float dt, float fogVal)
 {
-    if (!m_Impl || !m_Impl->initialized)
-        return;
+    if (!m_Impl || !m_Impl->initialized) return;
     m_Impl->fog = fogVal;
 
+    // Send position to background worker.
     if (m_Impl->settings.useMultithreading)
     {
         {
@@ -762,28 +707,30 @@ void AudioSystem::Update(const float3& pos, float dt, float fogVal)
         target = m_Impl->targetEAX;
     }
 
+    // Smoothly interpolate current EAX values towards target.
     if (target.isValid)
     {
         float speed = 2.0f * dt;
-        if (std::abs(target.lRoom - m_Impl->currentEAX.lRoom) > 1000)
-            speed = 5.0f * dt;
+        if (std::abs(target.lRoom - m_Impl->currentEAX.lRoom) > 1000) speed = 5.0f * dt;
 
-        auto& curr = m_Impl->currentEAX;
-        curr.lRoom = LerpEAX(curr.lRoom, target.lRoom, speed);
-        curr.lRoomHF = LerpEAX(curr.lRoomHF, target.lRoomHF, speed);
-        curr.lReflections = LerpEAX(curr.lReflections, target.lReflections, speed);
-        curr.lReverb = LerpEAX(curr.lReverb, target.lReverb, speed);
-        curr.flDecayTime = LerpEAX(curr.flDecayTime, target.flDecayTime, speed);
-        curr.flEnvironmentSize = LerpEAX(curr.flEnvironmentSize, target.flEnvironmentSize, speed);
+        auto& c = m_Impl->currentEAX;
+        c.lRoom = LerpEAX(c.lRoom, target.lRoom, speed);
+        c.lRoomHF = LerpEAX(c.lRoomHF, target.lRoomHF, speed);
+        c.lReflections = LerpEAX(c.lReflections, target.lReflections, speed);
+        c.lReverb = LerpEAX(c.lReverb, target.lReverb, speed);
+        c.flDecayTime = LerpEAX(c.flDecayTime, target.flDecayTime, speed);
+        c.flEnvironmentSize = LerpEAX(c.flEnvironmentSize, target.flEnvironmentSize, speed);
 
-        curr.flDecayHFRatio = target.flDecayHFRatio;
-        curr.flReflectionsDelay = target.flReflectionsDelay;
-        curr.flReverbDelay = target.flReverbDelay;
-        curr.flAirAbsorptionHF = target.flAirAbsorptionHF;
-        curr.flEnvironmentDiffusion = target.flEnvironmentDiffusion;
-        curr.debugEnclosedness = target.debugEnclosedness;
-        curr.debugOpenness = target.debugOpenness;
-        curr.isValid = true;
+        c.flDecayHFRatio = target.flDecayHFRatio;
+        c.flReflectionsDelay = target.flReflectionsDelay;
+        c.flReverbDelay = target.flReverbDelay;
+        c.flAirAbsorptionHF = target.flAirAbsorptionHF;
+        c.flEnvironmentDiffusion = target.flEnvironmentDiffusion;
+        c.debugEnclosedness = target.debugEnclosedness;
+        c.debugOpenness = target.debugOpenness;
+        c.debugMeanFreePath = target.debugMeanFreePath;
+        c.debugPhysicalVolume = target.debugPhysicalVolume;
+        c.isValid = true;
     }
 }
 
@@ -804,8 +751,7 @@ int AudioSystem::CreateCustomMaterial(const MaterialParams& p)
 
 float AudioSystem::CalculateOcclusion(const float3& listenerPos, const float3& sourcePos)
 {
-    if (!m_Impl || !m_Impl->occlusion)
-        return 1.0f;
+    if (!m_Impl || !m_Impl->occlusion) return 1.0f;
     return m_Impl->occlusion->Calculate(listenerPos, sourcePos);
 }
 

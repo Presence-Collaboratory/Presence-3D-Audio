@@ -54,11 +54,9 @@ public:
     {
         std::lock_guard<std::mutex> lock(GetInstance().logMutex);
 
-        // Вывод в консоль
         if (isError) std::cerr << "[ERROR] " << msg << std::endl;
         else         std::cout << "[INFO]  " << msg << std::endl;
 
-        // Вывод в файл
         if (GetInstance().fileStream.is_open()) {
             GetInstance().fileStream << (isError ? "[ERROR] " : "[INFO]  ") << msg << std::endl;
             GetInstance().fileStream.flush();
