@@ -62,6 +62,16 @@ PRESENCE_BEGIN
 // SECTION 1: CONSTANTS AND UTILITIES
 // =================================================================================================
 
+float GetVersion()
+{
+    return 0.4f;
+}
+
+const char* GetVersionString()
+{
+    return "Presence Audio ver. 0.4";
+}
+
 // Maximum number of different materials we can track acoustically.
 static const int MAX_TRACKED_MATERIALS = 64;
 
