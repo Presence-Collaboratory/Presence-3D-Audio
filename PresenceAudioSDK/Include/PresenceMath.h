@@ -60,9 +60,9 @@
 
 PRESENCE_BEGIN
 
-// Small constant for floating point comparisons (Epsilon)
-static constexpr float EPSILON = 1e-5f;
-static constexpr float PI = 3.1415926535f;
+// Small constant for floating point comparisons (kEpsilon)
+constexpr float kkEpsilon = 1e-5f;
+constexpr float kPi = 3.1415926535f;
 
 /**
     * @brief 3-dimensional vector class with SSE optimization.
