@@ -64,12 +64,12 @@ PRESENCE_BEGIN
 
 float GetVersion()
 {
-    return 0.4f;
+    return 0.41f;
 }
 
 const char* GetVersionString()
 {
-    return "Presence Audio ver. 0.4";
+    return "Presence Audio ver. 0.41";
 }
 
 // Maximum number of different materials we can track acoustically.
@@ -406,7 +406,7 @@ public:
         const float goldenRatio = (1.0f + std::sqrt(5.0f)) / 2.0f;
         for (int i = 0; i < N; ++i)
         {
-            float theta = 2.0f * PI * i / goldenRatio;   // azimuth
+            float theta = 2.0f * kPi * i / goldenRatio;           // azimuth
             float phi = std::acos(1.0f - 2.0f * (i + 0.5f) / N); // polar angle
             directions[i] = float3(std::sin(phi) * std::cos(theta),
                 std::cos(phi),
@@ -435,24 +435,55 @@ public:
     // ---------------------------------------------------------------------------------------------
     // EAX Parameter Mapping
     // ---------------------------------------------------------------------------------------------
-    // Translates the physically computed metrics (MFP, reflectivity, openness) into EAX parameters.
-    // All transitions are continuous – no hard thresholds.
-    // ---------------------------------------------------------------------------------------------
+    /**
+     * @brief Translate physically computed metrics into EAX reverb parameters.
+     *
+     * This method maps the geometric and material statistics gathered by the ray tracer
+     * (Mean Free Path, geometric openness, surface reflectivity, reverberation time)
+     * into the standard EAX 2.0 / OpenAL EFX parameter set.
+     *
+     * All transitions are continuous – no hard thresholds – to ensure smooth changes
+     * when the listener moves from enclosed rooms to open outdoor areas.
+     *
+     * The mapping follows several principles:
+     *   1.  Reverberation intensity is proportional to room "enclosedness" and
+     *       surface reflectivity.
+     *   2.  Openness (1 – enclosedness) suppresses reverberation very quickly using
+     *       a cubic function: openFactor = (1 – open)³.
+     *       This keeps indoor spaces lively while making outdoor areas almost dry.
+     *   3.  Room level, early reflections, and late reverb tail are each controlled
+     *       by the same cubic factor so that all components fade together.
+     *   4.  Decay time (RT60) blends between the physically computed value (indoor)
+     *       and a very short constant (0.1 s) for open air.
+     *   5.  A final overload protection prevents the sum of the three main gain
+     *       components from exceeding -30 mB, avoiding digital clipping in OpenAL.
+     *
+     * Notation:
+     *   - mB (millibels):  0 mB = full scale,  -10000 mB = silence.
+     *   - open: 0 = fully enclosed, 1 = completely open field.
+     *   - enclosed: 1 – open.
+     *   - percRefl: √(physicalReflectivity) – a perceptual measure of surface
+     *               "liveliness".
+     *   - mfp: Mean Free Path in metres.
+     *   - rt60: Reverberation time in seconds, computed by the simplified Eyring formula.
+     */
     void ComputeEAX()
     {
         EAXResult eax;
         eax.isValid = true;
 
-        // Debug outputs
+        // Debug outputs – raw geometry analysis results
         eax.debugEnclosedness = context.geometricEnclosedness;
         eax.debugOpenness = context.geometricOpenness;
         eax.debugMeanFreePath = context.meanFreePath;
         eax.debugPhysicalVolume = context.physicalVolume;
 
-        // Environment size = cubic root of the estimated physical volume
+        // Environment size = cubic root of the estimated physical volume.
+        // This gives a linear dimension that matches the listener's expectation
+        // of room size.
         eax.flEnvironmentSize = std::pow(context.physicalVolume, 1.0f / 3.0f);
 
-        // Convenient local aliases
+        // ---- Local aliases for readability ----
         const float fogVal = AnalysisContext::Clamp(fog, 0.0f, 1.0f);
         const float open = context.geometricOpenness;          // 0 = fully enclosed, 1 = open field
         const float enclosed = context.geometricEnclosedness;      // 1 = fully enclosed
@@ -460,55 +491,146 @@ public:
         const float mfp = context.meanFreePath;
         const float rt60 = context.reverbTime;
 
-        // Smooth suppression factor: 1.0 when enclosed, 0.15 when completely open.
-        const float opennessSuppression = 1.0f - 0.85f * open;
+        // ================================================================
+        // Cubic openness factor
+        // ================================================================
+        // openFactor = (1 – open)³   provides a rapid, yet smooth, falloff.
+        //   open = 0.0  →  factor = 1.000  (fully enclosed)
+        //   open = 0.3  →  factor = 0.343  (slightly open, e.g. a doorway)
+        //   open = 0.5  →  factor = 0.125  (half‑open)
+        //   open = 0.7  →  factor = 0.027  (mostly outdoor)
+        //   open = 1.0  →  factor = 0.000  (open field)
+        //
+        // The cubic shape was chosen empirically: it preserves indoor acoustics
+        // while drastically reducing reverberation once the listener steps outside.
+        const float openFactor = (1.0f - open) * (1.0f - open) * (1.0f - open);
 
-        // ---- 1. Room Level (overall reverb volume) ----
-        float roomInt = (0.3f + 0.7f * enclosed) * percRefl;  // base intensity
-        roomInt *= opennessSuppression;                        // continuous reduction by openness
-        roomInt = AnalysisContext::Clamp(roomInt - fogVal * 0.4f, 0.0f, 1.1f);
+        // ================================================================
+        // 1. Room Level (overall reverb volume)
+        // ================================================================
+        // Base intensity combines enclosedness and perceived reflectivity.
+        //   roomInt = (0.3 + 0.7 * enclosed) * percRefl
+        // The constants 0.3 and 0.7 ensure a minimum reverb level even in
+        // completely open spaces (when enclosed=0) and a maximum of 1.0 when
+        // fully enclosed with perfect reflectivity.
+        float roomInt = (0.3f + 0.7f * enclosed) * percRefl;
 
-        float room_mB = AnalysisContext::Lerp(-4000.0f, 400.0f, roomInt);
+        // Fog slightly reduces the reverb intensity (high‑frequency absorption).
+        roomInt = AnalysisContext::Clamp(roomInt - fogVal * 0.2f, 0.0f, 1.1f);
 
-        // Boost for very small, enclosed rooms
-        if (context.physicalVolume < 70.0f && enclosed > 0.8f)
-            room_mB += 500.0f;
+        // Two anchor points:
+        //   - roomClosed_mB: lively room,   intensity → [-1000, 0]   mB
+        //   - roomOpen_mB:   outdoor area,  intensity → [-3000, -2000] mB
+        //
+        // The actual room level blends between these two ranges using the
+        // cubic openFactor.  When openFactor = 1 (indoor) the result is
+        // roomClosed_mB; when openFactor = 0 (outdoor) it is roomOpen_mB.
+        float roomClosed_mB = AnalysisContext::Lerp(-1000.0f, 0.0f, roomInt);
+        float roomOpen_mB = AnalysisContext::Lerp(-3000.0f, -2000.0f, roomInt);
+        float room_mB = roomOpen_mB + (roomClosed_mB - roomOpen_mB) * openFactor;
 
-        eax.lRoom = static_cast<int32_t>(AnalysisContext::Clamp(room_mB, -10000.0f, 600.0f));
-        eax.lRoom = std::min(eax.lRoom, 0);   // EAX allows 0 as maximum
+        // Additional boost for very small, highly enclosed rooms.
+        // volFactor fades from 1 (volume ≤ 10 m³) to 0 (volume ≥ 70 m³).
+        // encFactor fades from 1 (enclosed ≥ 1.0) to 0 (enclosed ≤ 0.8).
+        // Together they add up to 500 mB, making tiny rooms noticeably more
+        // reverberant.
+        float volFactor = 1.0f - AnalysisContext::Clamp((context.physicalVolume - 10.0f) / 60.0f, 0.0f, 1.0f);
+        float encFactor = AnalysisContext::Clamp((enclosed - 0.8f) / 0.2f, 0.0f, 1.0f);
+        room_mB += 500.0f * volFactor * encFactor;
 
-        // ---- 2. Decay Time (RT60) ----
-        eax.flDecayTime = rt60;
-        if (fogVal > 0.5f) eax.flDecayTime *= 0.8f;
+        // Clamp to a safe maximum of -50 mB (0 mB would risk clipping in OpenAL).
+        eax.lRoom = static_cast<int32_t>(
+            AnalysisContext::Clamp(room_mB, -10000.0f, -50.0f));
 
-        // ---- 3. Early Reflections ----
-        float reflVolume = context.physicalReflectivity * opennessSuppression;
-        float refl_mB = AnalysisContext::Lerp(-2500.0f, 200.0f, reflVolume);
-        eax.lReflections = static_cast<int32_t>(AnalysisContext::Clamp(refl_mB, -10000.0f, 500.0f));
+        // ================================================================
+        // 2. Decay Time (RT60)
+        // ================================================================
+        // Physically derived reverberation time, optionally shortened by fog.
+        float fogDecayMultiplier = AnalysisContext::Lerp(1.0f, 0.8f, fogVal);
+        float physicalDecay = rt60 * fogDecayMultiplier;
 
-        float reflDelay = mfp / SOUND_SPEED;
-        if (open > 0.6f) reflDelay *= 1.5f;
+        // Outdoor spaces should have a very short decay – here 0.1 s.
+        // We blend between physicalDecay (indoor) and 0.1 s (outdoor) using
+        // the same cubic factor.
+        float decayClosed = physicalDecay;
+        float decayOpen = 0.1f;   // nearly dry
+        eax.flDecayTime = decayOpen + (decayClosed - decayOpen) * openFactor;
+
+        // ================================================================
+        // 3. Early Reflections
+        // ================================================================
+        // Reflection volume depends on surface reflectivity and the cubic
+        // openness factor, so reflections vanish quickly outdoors.
+        float reflVolume = context.physicalReflectivity * openFactor;
+        float refl_mB = AnalysisContext::Lerp(-1500.0f, 0.0f, reflVolume);
+        eax.lReflections = static_cast<int32_t>(AnalysisContext::Clamp(refl_mB, -10000.0f, 0.0f));
+
+        // Reflection delay = Mean Free Path / Speed of Sound.
+        // Outdoors, the delay is artificially increased (×1.5) because the
+        // nearest reflecting surface is usually farther away.
+        float outdoorDelayFactor = AnalysisContext::Lerp(1.0f, 1.5f, open);
+        float reflDelay = (mfp / SOUND_SPEED) * outdoorDelayFactor;
         eax.flReflectionsDelay = AnalysisContext::Clamp(reflDelay, 0.0f, 0.3f);
 
-        // ---- 4. Late Reverberation Tail ----
-        float reverb_mB = AnalysisContext::Lerp(-3000.0f, 0.0f, roomInt);
-        if (open > 0.7f) reverb_mB -= 600.0f;
-        eax.lReverb = static_cast<int32_t>(AnalysisContext::Clamp(reverb_mB, -10000.0f, 200.0f));
+        // ================================================================
+        // 4. Late Reverberation Tail
+        // ================================================================
+        // The tail intensity follows room intensity and the cubic factor,
+        // and is additionally suppressed by openness.
+        //   reverb_mB = Lerp(-2000, 0, roomInt * openFactor) – open * 2000
+        // The subtraction of (open * 2000) further dries out the outdoor tail.
+        float reverb_mB = AnalysisContext::Lerp(-2000.0f, 0.0f, roomInt * openFactor);
+        reverb_mB -= open * 2000.0f;
+        eax.lReverb = static_cast<int32_t>(AnalysisContext::Clamp(reverb_mB, -10000.0f, 0.0f));
+
+        // The reverb tail starts shortly after the early reflections.
         eax.flReverbDelay = AnalysisContext::Clamp(eax.flReflectionsDelay + 0.02f, 0.0f, 0.1f);
 
-        // ---- 5. High-frequency behaviour ----
+        // ================================================================
+        // 5. Final overload protection (master gain reduction)
+        // ================================================================
+        // If the combined level of Room, Reflections, and Reverb exceeds
+        // -30 mB, all three are scaled down proportionally so that the sum
+        // exactly equals -30 mB.  This prevents clipping in the audio driver.
+        float totalGain = static_cast<float>(eax.lRoom) +
+                          static_cast<float>(eax.lReflections) +
+                          static_cast<float>(eax.lReverb);
+        if (totalGain > -30.0f)
+        {
+            float scale = -30.0f / totalGain;
+            eax.lRoom = static_cast<int32_t>(eax.lRoom * scale);
+            eax.lReflections = static_cast<int32_t>(eax.lReflections * scale);
+            eax.lReverb = static_cast<int32_t>(eax.lReverb * scale);
+        }
+
+        // ================================================================
+        // 6. High‑frequency behaviour
+        // ================================================================
+        // Base HF loss is -100 mB, plus an outdoor penalty proportional to
+        // openness (-1200 mB at open=1).  This rolls off high frequencies
+        // faster outdoors, simulating air absorption and lack of reflecting
+        // surfaces for treble.
         const float hfLoss = -100.0f;
         const float outdoorHF = open * -1200.0f;
         float roomHF_mB = static_cast<float>(eax.lRoom) + hfLoss + outdoorHF;
         eax.lRoomHF = static_cast<int32_t>(AnalysisContext::Clamp(roomHF_mB, -10000.0f, -100.0f));
 
+        // Decay HF ratio: 0.83 indoors (HF decays slightly faster),
+        // 0.5 outdoors (HF decays much faster).
         eax.flDecayHFRatio = AnalysisContext::Lerp(0.83f, 0.5f, open);
-        eax.flEnvironmentDiffusion = AnalysisContext::Lerp(1.0f, 0.6f,
-            AnalysisContext::Clamp(open * 1.5f, 0.0f, 1.0f));
-        eax.flAirAbsorptionHF = -5.0f + open * -8.0f - fogVal * 5.0f;
+
+        // Diffusion (echo density): 1.0 indoors, 0.6 outdoors.
+        eax.flEnvironmentDiffusion = AnalysisContext::Lerp(1.0f, 0.6f, AnalysisContext::Clamp(open * 1.5f, 0.0f, 1.0f));
+
+        // Air absorption HF: starts at -5 dB per meter, increases with
+        // openness and fog.
+        eax.flAirAbsorptionHF = -5.0f + open * -4.0f - fogVal * 3.0f;
+
+        // Rolloff factor not used (0.0 = no distance‑based rolloff of the
+        // reverb effect itself).
         eax.flRoomRolloffFactor = 0.0f;
 
-        // Thread-safe publication
+        // Thread‑safe publication of the new target EAX state.
         {
             std::lock_guard<std::mutex> lock(mutex);
             targetEAX = eax;
@@ -517,12 +639,7 @@ public:
 
     // ---------------------------------------------------------------------------------------------
     // Background Physics Loop
-    // ---------------------------------------------------------------------------------------------
-    // 1. Traces 64 rays with up to settings.maxBounces reflections.
-    // 2. Computes per-frame statistics (hit ratio, MFP, reflectivity).
-    // 3. Applies exponential smoothing to stabilise metrics.
-    // 4. Derives physical volume and reverb time (simplified Eyring formula).
-    // 5. Calls ComputeEAX to map to EAX parameters.
+    // (unchanged – only shown here for completeness)
     // ---------------------------------------------------------------------------------------------
     void PhysicsLoop()
     {
@@ -593,13 +710,9 @@ public:
             const float numRaysF = static_cast<float>(directions.size());
             const float hitCountF = static_cast<float>(context.firstHitCount);
 
-            // Hit ratio (fraction of rays that immediately hit geometry)
             float rawHitRatio = hitCountF / numRaysF;
-
-            // Hybrid Mean Free Path: treats misses as maxRayDistance.
             float rawMFP = (context.firstHitDistSum + (numRaysF - hitCountF) * settings.maxRayDistance) / numRaysF;
 
-            // Material-weighted average reflectivity
             float totalHits = 0.0f, accumRefl = 0.0f;
             for (int i = 0; i < MAX_TRACKED_MATERIALS; ++i)
             {
@@ -616,7 +729,7 @@ public:
             rawReflectivity = AnalysisContext::Clamp(rawReflectivity, 0.05f, 0.95f);
 
             // ---- Exponential Smoothing ----
-            const float smoothing = 0.2f;  // time constant ~5 frames
+            const float smoothing = 0.2f;
             if (firstFrame)
             {
                 smoothedMFP = rawMFP;
@@ -639,18 +752,21 @@ public:
             context.perceivedReflectivity = std::sqrt(smoothedReflectivity);
 
             // ---- Physical Volume Estimation ----
-            // Using a cubic approximation: V = 8 * MFP^3  (works for typical convex rooms).
+            // Base estimate: cubic approximation V = 8 * MFP^3
             float estVol = 8.0f * std::pow(smoothedMFP, 3.0f);
-            if (context.geometricOpenness > 0.6f)
-                estVol = std::min(estVol, 50000.0f);   // cap for open areas
+
+            // Maximum allowed volume smoothly decreases with openness.
+            //   open = 0.0 → maxVol = 500000  (indoor, no artificial cap)
+            //   open = 1.0 → maxVol =  50000  (outdoor, limit size)
+            float maxVol = AnalysisContext::Lerp(500000.0f, 50000.0f, context.geometricOpenness);
+            estVol = std::min(estVol, maxVol);
+
+            // Clamp to final valid range
             context.physicalVolume = AnalysisContext::Clamp(estVol, 10.0f, 500000.0f);
 
             // ---- Reverberation Time (RT60) ----
-            // Based on simplified Eyring formula: RT60 = 0.04025 * MFP / (-ln(1 - α))
-            // where α = 1 - physicalReflectivity.
             float absCoeff = AnalysisContext::Clamp(1.0f - smoothedReflectivity, 0.01f, 0.99f);
             float rt60 = 0.04025f * smoothedMFP / (-std::log(1.0f - absCoeff));
-            // Openness reduces RT60 (energy escapes).
             rt60 *= (1.0f - 0.95f * context.geometricOpenness);
             context.reverbTime = AnalysisContext::Clamp(rt60, 0.05f, 8.0f);
 
@@ -658,7 +774,7 @@ public:
             ComputeEAX();
             if (occlusion) occlusion->Tick();
 
-            std::this_thread::sleep_for(std::chrono::milliseconds(33));   // ~30 updates/sec
+            std::this_thread::sleep_for(std::chrono::milliseconds(33));
         }
     }
 };
